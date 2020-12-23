@@ -1,8 +1,33 @@
 use std::collections::{HashMap,HashSet};
+use bincode;
+use serde::{Serialize,Deserialize};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn serialize_tests() {
+        serialize("aba", true);
+        serialize("jfkds.}laN= -;a|ba", false);
+        serialize("asab", false);
+    }
+
+    fn serialize(contents: &str, check_reconstruct: bool) {
+        let trie = SuffixTrie::new(contents);
+        let encoded: Vec<u8> = bincode::serialize(&trie).unwrap();
+        let decoded: SuffixTrie = bincode::deserialize(&encoded[..]).unwrap();
+
+        println!("{:#?}", trie);
+        println!("{:#?}", decoded);
+        if check_reconstruct {
+            // The debug formatting is not definitive e.g. keys will
+            // appear in a different order, but the structure is the same
+            // So we can only use this check in certain situations e.g. "aba"
+            assert_eq!(format!("{:#?}", trie),
+                       format!("{:#?}", decoded));
+        }
+    }
 
     #[test]
     fn test_size() {
@@ -49,7 +74,7 @@ mod tests {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Serialize,Deserialize)]
 struct SuffixTrie {
     // Place to store entire string - keeps ownership simple
     str_storage: String,
@@ -57,7 +82,7 @@ struct SuffixTrie {
     node_storage: Vec<SubTrie>,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Serialize,Deserialize)]
 struct SubTrie {
     // Index of this node in the overall array
     node_index: usize,
