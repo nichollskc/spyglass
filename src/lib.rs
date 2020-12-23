@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap,HashSet};
 
 #[cfg(test)]
 mod tests {
@@ -9,6 +9,24 @@ mod tests {
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
         assert_eq!(trie.len(), 6);
+    }
+
+    #[test]
+    fn test_leaves() {
+        let trie = SuffixTrie::new("aba");
+        println!("Result is {:#?}", trie);
+
+        let expected: HashSet<usize> = (0..3).collect();
+        let mut actual: HashSet<usize> = HashSet::new();
+        for node in trie.node_storage.iter() {
+            for leaf_child in node.leaf_children.iter() {
+                // Insert node to list, and assert that it wasn't already present
+                assert!(actual.insert(*leaf_child));
+            }
+        }
+        // Check for equality
+        assert!(actual.is_superset(&expected));
+        assert!(expected.is_superset(&actual));
     }
 }
 
@@ -28,6 +46,8 @@ struct SubTrie {
     node_index: usize,
     // List of children node indices
     children: HashMap<char, usize>,
+    // List of indices at which this suffix is present
+    leaf_children: Vec<usize>,
 }
 
 impl SuffixTrie {
@@ -40,7 +60,7 @@ impl SuffixTrie {
 
         for (index, _c) in string.char_indices() {
             let suffix = &string[index..];
-            suffix_trie.add_string(suffix);
+            suffix_trie.add_string(suffix, index);
         }
         suffix_trie
     }
@@ -88,13 +108,16 @@ impl SuffixTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
     }
 
-    fn add_string(&mut self, string: &str) {
+    fn add_string(&mut self, string: &str, string_key: usize) {
         let mut parent_index = 0;
 
         for c in string.chars() {
             let child_index = self.add_edge(c, parent_index);
             parent_index = child_index;
         }
+
+        let parent: &mut SubTrie = self.get_node_mut(parent_index);
+        parent.add_leaf_child(string_key);
     }
 
     fn _unsafe_add_child_to_parent(&mut self,
@@ -115,10 +138,15 @@ impl SubTrie {
         SubTrie {
             children: HashMap::new(),
             node_index,
+            leaf_children: vec![],
         }
     }
 
     fn get_child_index(&self, edge: char) -> Option<&usize> {
         self.children.get(&edge)
+    }
+
+    fn add_leaf_child(&mut self, key: usize) {
+        self.leaf_children.push(key);
     }
 }
