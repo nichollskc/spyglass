@@ -17,6 +17,7 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let expected: HashSet<usize> = (0..3).collect();
+        // Gather together all leaf children from the SuffixTrie
         let mut actual: HashSet<usize> = HashSet::new();
         for node in trie.node_storage.iter() {
             for leaf_child in node.leaf_children.iter() {
@@ -28,12 +29,28 @@ mod tests {
         assert!(actual.is_superset(&expected));
         assert!(expected.is_superset(&actual));
     }
+
+    #[test]
+    fn find_occurrences_aba() {
+        let trie = SuffixTrie::new("aba");
+        println!("Result is {:#?}", trie);
+
+        let occurrences = trie.find_all("a");
+        assert_eq!(occurrences, vec![0, 2]);
+    }
+
+    #[test]
+    fn find_occurrences_banana() {
+        let trie = SuffixTrie::new("bananaBal");
+        println!("Result is {:#?}", trie);
+
+        let occurrences = trie.find_all("an");
+        assert_eq!(occurrences, vec![1, 3]);
+    }
 }
 
 #[derive(Debug)]
 struct SuffixTrie {
-    // Actual trie structure
-    root: SubTrie,
     // Place to store entire string - keeps ownership simple
     str_storage: String,
     // Place to store all the nodes
@@ -44,7 +61,8 @@ struct SuffixTrie {
 struct SubTrie {
     // Index of this node in the overall array
     node_index: usize,
-    // List of children node indices
+    // List of children node indices, indexed by the character labelling the edge
+    // from the parent to the child
     children: HashMap<char, usize>,
     // List of indices at which this suffix is present
     leaf_children: Vec<usize>,
@@ -52,10 +70,10 @@ struct SubTrie {
 
 impl SuffixTrie {
     fn new(string: &str) -> Self {
+        let root_node = SubTrie::empty(0);
         let mut suffix_trie = SuffixTrie {
             str_storage: String::from(string.clone()) + "$0",
-            node_storage: vec![SubTrie::empty(0)],
-            root: SubTrie::empty(0),
+            node_storage: vec![root_node],
         };
 
         for (index, _c) in string.char_indices() {
@@ -120,6 +138,33 @@ impl SuffixTrie {
         parent.add_leaf_child(string_key);
     }
 
+    fn find_all(&self, pattern: &str) -> Vec<usize> {
+        let mut parent: &SubTrie = self.get_node(0);
+        for c in pattern.chars() {
+            let child = parent.get_child_index(c);
+            match child {
+                Some(child_index) => {
+                    parent = self.get_node(*child_index);
+                },
+                None => return Vec::new()
+            }
+        }
+        self.get_all_leaf_descendants(parent.node_index)
+    }
+
+    fn get_all_leaf_descendants(&self, node_index: usize) -> Vec<usize> {
+        let mut leaves = Vec::new();
+        let mut to_process: Vec<usize> = vec![node_index];
+        while let Some(index) = to_process.pop() {
+            let node = self.get_node(index);
+            leaves.extend(&node.leaf_children);
+            let children: Vec<usize> = node.children.values().cloned().collect();
+            to_process.extend(&children);
+        }
+        leaves.sort();
+        leaves
+    }
+
     fn _unsafe_add_child_to_parent(&mut self,
                                    edge: char,
                                    parent_index: usize,
@@ -129,8 +174,6 @@ impl SuffixTrie {
         assert!(! parent.children.contains_key(&edge));
         parent.children.insert(edge, child_index);
     }
-
-    fn leaf_count(&self) -> usize { unimplemented!() } //self.root.leaf_count() }
 }
 
 impl SubTrie {
