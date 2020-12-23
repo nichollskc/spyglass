@@ -6,11 +6,13 @@ mod tests {
 
     #[test]
     fn test_size() {
-        let trie = SuffixTrie::new("banana");
-        assert_eq!(trie.leaf_count(), 7);
+        let trie = SuffixTrie::new("aba");
+        println!("Result is {:#?}", trie);
+        assert_eq!(trie.len(), 6);
     }
 }
 
+#[derive(Debug)]
 struct SuffixTrie {
     // Actual trie structure
     root: SubTrie,
@@ -20,6 +22,7 @@ struct SuffixTrie {
     node_storage: Vec<SubTrie>,
 }
 
+#[derive(Debug)]
 struct SubTrie {
     // Index of this node in the overall array
     node_index: usize,
@@ -31,7 +34,7 @@ impl SuffixTrie {
     fn new(string: &str) -> Self {
         let mut suffix_trie = SuffixTrie {
             str_storage: String::from(string.clone()) + "$0",
-            node_storage: Vec::new(),
+            node_storage: vec![SubTrie::empty(0)],
             root: SubTrie::empty(0),
         };
 
@@ -40,6 +43,10 @@ impl SuffixTrie {
             suffix_trie.add_string(suffix);
         }
         suffix_trie
+    }
+
+    fn len(&self) -> usize {
+        self.node_storage.len()
     }
 
     fn add_node(&mut self, edge: char, parent_index: usize) -> usize {
@@ -68,7 +75,13 @@ impl SuffixTrie {
     }
 
     fn get_node(&self, node_index: usize) -> &SubTrie {
-        &self.node_storage.get(node_index).expect("Node not found!")
+        let node = self.node_storage.get(node_index);
+        match node {
+            Some(n) =>  n,
+            None => {
+                panic!("Index out of bounds: {} size is {}", node_index, self.node_storage.len());
+            }
+        }
     }
 
     fn get_node_mut(&mut self, node_index: usize) -> &mut SubTrie {
