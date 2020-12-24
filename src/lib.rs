@@ -80,6 +80,23 @@ mod tests {
 
         let matches = trie.find_all_partial("bar", 1);
         assert_eq!(matches, vec![0, 3, 6]);
+
+        let matches = trie.find_all_partial("bar", 2);
+        assert_eq!(matches, vec![0, 3, 6, 9]);
+    }
+
+    #[test]
+    fn find_partial_matches_ignore() {
+        let trie = SuffixTrie::new("He wracked wrack'd wrack'ed");
+        println!("Result is {:#?}", trie);
+
+        let mut ignored = HashMap::new();
+        ignored.insert('e', true);
+        ignored.insert('\'', true);
+        let matches = trie.find_all_partial_ignore("wrackd", 0, ignored.clone());
+        assert_eq!(matches, vec![3, 11, 19]);
+        let matches = trie.find_all_partial("wrackd", 0);
+        assert_eq!(matches, vec![]);
     }
 }
 
@@ -187,39 +204,53 @@ impl SuffixTrie {
         parent.add_leaf_child(string_key);
     }
 
-//    fn find_all_partial(&self, pattern: &str, ignored_characters: HashMap<char, bool>) -> Vec<usize> {
     fn find_all_partial(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
+        self.find_all_partial_ignore(pattern, max_errors, HashMap::new())
+    }
+
+    fn find_all_partial_ignore(&self,
+                               pattern: &str,
+                               max_errors: usize,
+                               ignored_characters: HashMap<char, bool>) -> Vec<usize> {
         // Keep track of matches and how many errors they have so far
-        let mut matches: Vec<Match> = vec![Match::new(0, 0)];
+        let mut matches_this_gen: Vec<Match> = vec![Match::new(0, 0)];
         for c in pattern.chars() {
             let mut matches_next_gen: Vec<Match> = Vec::new();
             println!("Matching char: {}", c);
-            println!("Matching nodes: {:#?}", matches);
-            for parent_match in matches.iter() {
+            println!("Matching nodes: {:#?}", matches_this_gen);
+            while let Some(parent_match) = matches_this_gen.pop() {
                 let parent = self.get_node(parent_match.node_index);
                 for (edge, child_index) in parent.children.iter() {
                     println!("Considering child {}", edge);
                     let mut child_errors = parent_match.errors;
-                    if *edge != c {
-                        child_errors += 1;
-                    }
-                    if child_errors <= max_errors {
-                        // This is still a partial match
-                        matches_next_gen.push(Match::new(*child_index,
+                    if ignored_characters.contains_key(edge) {
+                        matches_this_gen.push(Match::new(*child_index,
                                                          child_errors));
-                        println!("Adding child");
+                        println!("Adding child this gen");
+                    } else {
+                        if *edge != c {
+                            child_errors += 1;
+                        }
+                        if child_errors <= max_errors {
+                            // This is still a partial match
+                            matches_next_gen.push(Match::new(*child_index,
+                                                             child_errors));
+                            println!("Adding child next gen");
+                        }
                     }
                 }
+                println!("Left this gen {:#?}", matches_this_gen);
+                println!("Left next gen: {:#?}", matches_next_gen);
             }
             if matches_next_gen.is_empty() {
                 // There are no partial matches
                 return Vec::new();
             } else {
-                matches = matches_next_gen;
+                matches_this_gen = matches_next_gen;
             }
         }
         let mut leaves = vec![];
-        for parent_match in matches.iter() {
+        for parent_match in matches_this_gen.iter() {
             println!("Matching node: {:#?}", parent_match.node_index);
             leaves.extend(self.get_all_leaf_descendants(parent_match.node_index));
         }
