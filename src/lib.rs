@@ -217,7 +217,17 @@ impl SuffixTrie {
     }
 
     fn find_all(&self, pattern: &str) -> Vec<usize> {
-        self.find_all_partial(pattern, HashMap::new())
+        let mut parent: &SubTrie = self.get_node(0);
+        for c in pattern.chars() {
+            let child = parent.get_child_index(c);
+            match child {
+                Some(child_index) => {
+                    parent = self.get_node(*child_index);
+                },
+                None => return Vec::new()
+            }
+        }
+        self.get_all_leaf_descendants(parent.node_index)
     }
 
     fn get_all_leaf_descendants(&self, node_index: usize) -> Vec<usize> {
