@@ -83,6 +83,9 @@ mod tests {
 
         let matches = trie.find_all_partial("bar", 2);
         assert_eq!(matches, vec![0, 3, 6, 9]);
+
+        let matches = trie.find_all_partial("wrackd", 0);
+        assert_eq!(matches, vec![]);
     }
 
     #[test]
@@ -93,14 +96,22 @@ mod tests {
         let mut ignored = HashMap::new();
         ignored.insert('e', true);
         ignored.insert('\'', true);
-        let matches = trie.find_all_partial_ignore("wrack'de", 0, ignored.clone());
+        let matches = trie.find_all_partial_ignore("wrackd", 0, false, ignored.clone());
         assert_eq!(matches, vec![3, 11, 19]);
-        let matches = trie.find_all_partial_ignore("wrackd", 0, ignored.clone());
+        let matches = trie.find_all_partial_ignore("wrack'de", 0, false, ignored.clone());
         assert_eq!(matches, vec![3, 11, 19]);
-        let matches = trie.find_all_partial("wrackd", 0);
-        assert_eq!(matches, vec![]);
+    }
+
+    #[test]
+    fn find_single_wildcard() {
+        let trie = SuffixTrie::new("oh this and that");
+        println!("Result is {:#?}", trie);
+        let matches = trie.find_all_partial_ignore("th??", 0, true, HashMap::new());
+        assert_eq!(matches, vec![3, 12]);
     }
 }
+
+const SINGLE_WILDCARD: char = '?';
 
 #[derive(Debug)]
 struct Match {
@@ -207,12 +218,13 @@ impl SuffixTrie {
     }
 
     fn find_all_partial(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
-        self.find_all_partial_ignore(pattern, max_errors, HashMap::new())
+        self.find_all_partial_ignore(pattern, max_errors, false, HashMap::new())
     }
 
     fn find_all_partial_ignore(&self,
                                pattern: &str,
                                max_errors: usize,
+                               wildcard: bool,
                                ignored_characters: HashMap<char, bool>) -> Vec<usize> {
         // Keep track of matches and how many errors they have so far
         let mut matches_this_gen: Vec<Match> = vec![Match::new(0, 0)];
@@ -225,16 +237,24 @@ impl SuffixTrie {
                 for (edge, child_index) in parent.children.iter() {
                     println!("Considering child {}", edge);
                     let mut child_errors = parent_match.errors;
+                    let mut is_this_gen = false;
                     if ignored_characters.contains_key(edge) {
-                        matches_this_gen.push(Match::new(*child_index,
-                                                         child_errors));
-                        println!("Adding child this gen");
+                        is_this_gen = true;
+                        println!("Can consume this edge for free");
+                    } else if wildcard && c == SINGLE_WILDCARD {
+                        // This doesn't count as an error
+                    } else if *edge == c {
+                        // This doesn't count as an error
                     } else {
-                        if *edge != c {
-                            child_errors += 1;
-                        }
-                        if child_errors <= max_errors {
-                            // This is still a partial match
+                        child_errors += 1;
+                    }
+                    if child_errors <= max_errors {
+                        // This is still a partial match
+                        if is_this_gen {
+                            matches_this_gen.push(Match::new(*child_index,
+                                                             child_errors));
+                            println!("Adding child this gen");
+                        } else {
                             matches_next_gen.push(Match::new(*child_index,
                                                              child_errors));
                             println!("Adding child next gen");
