@@ -8,7 +8,7 @@ mod tests {
 
     #[test]
     fn serialize_tests() {
-        serialize("aba", true);
+        serialize("aba", false);
         serialize("jfkds.}laN= -;a|ba", false);
         serialize("asab", false);
     }
@@ -56,21 +56,32 @@ mod tests {
     }
 
     #[test]
-    fn find_occurrences_aba() {
+    fn find_matches() {
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
 
-        let occurrences = trie.find_all("a");
-        assert_eq!(occurrences, vec![0, 2]);
-    }
+        let matches = trie.find_all("a");
+        assert_eq!(matches, vec![0, 2]);
 
-    #[test]
-    fn find_occurrences_banana() {
         let trie = SuffixTrie::new("bananaBal");
         println!("Result is {:#?}", trie);
 
-        let occurrences = trie.find_all("an");
-        assert_eq!(occurrences, vec![1, 3]);
+        let matches = trie.find_all("an");
+        assert_eq!(matches, vec![1, 3]);
+
+        let matches = trie.find_all("ab");
+        assert_eq!(matches, vec![]);
+    }
+
+    #[test]
+    fn find_partial_matches() {
+        let trie = SuffixTrie::new("kjbjbjbaajaba");
+        println!("Result is {:#?}", trie);
+
+        let mut ignored = HashMap::new();
+        ignored.insert('j', true);
+        let matches = trie.find_all_partial("bb", ignored);
+        assert_eq!(matches, vec![2, 4]);
     }
 }
 
@@ -163,18 +174,40 @@ impl SuffixTrie {
         parent.add_leaf_child(string_key);
     }
 
-    fn find_all(&self, pattern: &str) -> Vec<usize> {
-        let mut parent: &SubTrie = self.get_node(0);
+    fn find_all_partial(&self, pattern: &str, ignored_characters: HashMap<char, bool>) -> Vec<usize> {
+        let mut parents: Vec<&SubTrie> = vec![self.get_node(0)];
         for c in pattern.chars() {
-            let child = parent.get_child_index(c);
-            match child {
-                Some(child_index) => {
-                    parent = self.get_node(*child_index);
-                },
-                None => return Vec::new()
+            let mut children: Vec<&SubTrie> = Vec::new();
+            println!("Matching char: {}", c);
+            println!("Matching nodes: {:#?}", parents);
+            for parent in parents.iter() {
+                if ignored_characters.contains_key(&c) {
+                    // Keep all children
+                    for child_index in parent.children.values() {
+                        children.push(self.get_node(*child_index));
+                    }
+                } else {
+                    if let Some(child_index) = parent.get_child_index(c) {
+                        children.push(self.get_node(*child_index));
+                    }
+                }
+            }
+            if children.is_empty() {
+                return Vec::new();
+            } else {
+                parents = children;
             }
         }
-        self.get_all_leaf_descendants(parent.node_index)
+        let mut leaves = vec![];
+        for parent in parents {
+            println!("Matching node: {:#?}", parent);
+            leaves.extend(self.get_all_leaf_descendants(parent.node_index));
+        }
+        leaves
+    }
+
+    fn find_all(&self, pattern: &str) -> Vec<usize> {
+        self.find_all_partial(pattern, HashMap::new())
     }
 
     fn get_all_leaf_descendants(&self, node_index: usize) -> Vec<usize> {
