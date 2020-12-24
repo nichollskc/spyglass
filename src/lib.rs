@@ -73,28 +73,20 @@ mod tests {
         assert_eq!(matches, vec![]);
     }
 
-    fn find_ignore_from_pattern() {
-        let trie = SuffixTrie::new("kjbjbjbaajaba");
-        println!("Result is {:#?}", trie);
-
-        let mut ignored = HashMap::new();
-        ignored.insert('j', true);
-        let matches = trie.find_all("aa");
-        assert_eq!(matches, vec![7]);
-        let matches = trie.find_all_partial("aja", ignored);
-        assert_eq!(matches, vec![7, 8]);
-    }
-
     #[test]
     fn find_partial_matches() {
-        let trie = SuffixTrie::new("kjbjbjbaajaba");
+        let trie = SuffixTrie::new("barbazbanboo");
         println!("Result is {:#?}", trie);
 
-        let mut ignored = HashMap::new();
-        ignored.insert('j', true);
-        let matches = trie.find_all_partial("bb", ignored);
-        assert_eq!(matches, vec![2, 4]);
+        let matches = trie.find_all_partial("bar", 1);
+        assert_eq!(matches, vec![0, 3, 6]);
     }
+}
+
+#[derive(Debug)]
+struct Match {
+    node_index: usize,
+    errors: usize,
 }
 
 #[derive(Debug,Serialize,Deserialize)]
@@ -114,6 +106,15 @@ struct SubTrie {
     children: HashMap<char, usize>,
     // List of indices at which this suffix is present
     leaf_children: Vec<usize>,
+}
+
+impl Match {
+    fn new(node_index: usize, errors: usize) -> Self {
+        Match {
+            node_index,
+            errors,
+        }
+    }
 }
 
 impl SuffixTrie {
@@ -186,33 +187,43 @@ impl SuffixTrie {
         parent.add_leaf_child(string_key);
     }
 
-    fn find_all_partial(&self, pattern: &str, ignored_characters: HashMap<char, bool>) -> Vec<usize> {
-        let mut parents: Vec<&SubTrie> = vec![self.get_node(0)];
+//    fn find_all_partial(&self, pattern: &str, ignored_characters: HashMap<char, bool>) -> Vec<usize> {
+    fn find_all_partial(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
+        // Keep track of matches and how many errors they have so far
+        let mut matches: Vec<Match> = vec![Match::new(0, 0)];
         for c in pattern.chars() {
-            let mut children: Vec<&SubTrie> = Vec::new();
+            let mut matches_next_gen: Vec<Match> = Vec::new();
             println!("Matching char: {}", c);
-            println!("Matching nodes: {:#?}", parents);
-            for parent in parents.iter() {
+            println!("Matching nodes: {:#?}", matches);
+            for parent_match in matches.iter() {
+                let parent = self.get_node(parent_match.node_index);
                 for (edge, child_index) in parent.children.iter() {
                     println!("Considering child {}", edge);
-                    if *edge == c || ignored_characters.contains_key(edge) {
-                        // Keep child
-                        children.push(self.get_node(*child_index));
+                    let mut child_errors = parent_match.errors;
+                    if *edge != c {
+                        child_errors += 1;
+                    }
+                    if child_errors <= max_errors {
+                        // This is still a partial match
+                        matches_next_gen.push(Match::new(*child_index,
+                                                         child_errors));
                         println!("Adding child");
                     }
                 }
             }
-            if children.is_empty() {
+            if matches_next_gen.is_empty() {
+                // There are no partial matches
                 return Vec::new();
             } else {
-                parents = children;
+                matches = matches_next_gen;
             }
         }
         let mut leaves = vec![];
-        for parent in parents {
-            println!("Matching node: {:#?}", parent);
-            leaves.extend(self.get_all_leaf_descendants(parent.node_index));
+        for parent_match in matches.iter() {
+            println!("Matching node: {:#?}", parent_match.node_index);
+            leaves.extend(self.get_all_leaf_descendants(parent_match.node_index));
         }
+        leaves.sort();
         leaves
     }
 
