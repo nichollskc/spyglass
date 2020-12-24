@@ -93,6 +93,8 @@ mod tests {
         let mut ignored = HashMap::new();
         ignored.insert('e', true);
         ignored.insert('\'', true);
+        let matches = trie.find_all_partial_ignore("wrack'de", 0, ignored.clone());
+        assert_eq!(matches, vec![3, 11, 19]);
         let matches = trie.find_all_partial_ignore("wrackd", 0, ignored.clone());
         assert_eq!(matches, vec![3, 11, 19]);
         let matches = trie.find_all_partial("wrackd", 0);
@@ -214,7 +216,7 @@ impl SuffixTrie {
                                ignored_characters: HashMap<char, bool>) -> Vec<usize> {
         // Keep track of matches and how many errors they have so far
         let mut matches_this_gen: Vec<Match> = vec![Match::new(0, 0)];
-        for c in pattern.chars() {
+        for c in pattern.chars().filter(|x| !ignored_characters.contains_key(x)) {
             let mut matches_next_gen: Vec<Match> = Vec::new();
             println!("Matching char: {}", c);
             println!("Matching nodes: {:#?}", matches_this_gen);
