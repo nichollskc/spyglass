@@ -73,6 +73,18 @@ mod tests {
         assert_eq!(matches, vec![]);
     }
 
+    fn find_ignore_from_pattern() {
+        let trie = SuffixTrie::new("kjbjbjbaajaba");
+        println!("Result is {:#?}", trie);
+
+        let mut ignored = HashMap::new();
+        ignored.insert('j', true);
+        let matches = trie.find_all("aa");
+        assert_eq!(matches, vec![7]);
+        let matches = trie.find_all_partial("aja", ignored);
+        assert_eq!(matches, vec![7, 8]);
+    }
+
     #[test]
     fn find_partial_matches() {
         let trie = SuffixTrie::new("kjbjbjbaajaba");
@@ -181,14 +193,12 @@ impl SuffixTrie {
             println!("Matching char: {}", c);
             println!("Matching nodes: {:#?}", parents);
             for parent in parents.iter() {
-                if ignored_characters.contains_key(&c) {
-                    // Keep all children
-                    for child_index in parent.children.values() {
+                for (edge, child_index) in parent.children.iter() {
+                    println!("Considering child {}", edge);
+                    if *edge == c || ignored_characters.contains_key(edge) {
+                        // Keep child
                         children.push(self.get_node(*child_index));
-                    }
-                } else {
-                    if let Some(child_index) = parent.get_child_index(c) {
-                        children.push(self.get_node(*child_index));
+                        println!("Adding child");
                     }
                 }
             }
