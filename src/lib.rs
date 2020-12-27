@@ -1,6 +1,8 @@
 use std::cmp;
+use std::cmp::Ordering;
 use std::fs;
 use std::io;
+use std::io::{Error,ErrorKind};
 use std::path::Path;
 use std::collections::{HashMap,HashSet};
 use bincode;
@@ -9,6 +11,11 @@ use serde::{Serialize,Deserialize};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn compare_matches(leaves: Vec<Leaf>, indices: Vec<usize>) {
+        let leaf_indices: Vec<usize> = leaves.iter().map(|l| l.index_in_str).collect();
+        assert_eq!(leaf_indices, indices);
+    }
 
     #[test]
     fn serialize_tests() {
@@ -51,7 +58,7 @@ mod tests {
         for node in trie.node_storage.iter() {
             for leaf_child in node.leaf_children.iter() {
                 // Insert node to list, and assert that it wasn't already present
-                assert!(actual.insert(*leaf_child));
+                assert!(actual.insert(leaf_child.index_in_str));
             }
         }
         // Check for equality
@@ -65,16 +72,16 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_exact("a");
-        assert_eq!(matches, vec![0, 2]);
+        compare_matches(matches, vec![0, 2]);
 
         let trie = SuffixTrie::new("bananaBal");
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_exact("an");
-        assert_eq!(matches, vec![1, 3]);
+        compare_matches(matches, vec![1, 3]);
 
         let matches = trie.find_exact("ab");
-        assert_eq!(matches, vec![]);
+        compare_matches(matches, vec![]);
     }
 
     #[test]
@@ -83,16 +90,16 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_edit_distance("a", 0);
-        assert_eq!(matches, vec![0, 2]);
+        compare_matches(matches, vec![0, 2]);
 
         let trie = SuffixTrie::new("bananaBal");
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_edit_distance("an", 0);
-        assert_eq!(matches, vec![1, 3]);
+        compare_matches(matches, vec![1, 3]);
 
         let matches = trie.find_edit_distance("ab", 0);
-        assert_eq!(matches, vec![]);
+        compare_matches(matches, vec![]);
     }
 
     #[test]
@@ -101,7 +108,7 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_edit_distance("abcdef", 1);
-        assert_eq!(matches, vec![0, 7]);
+        compare_matches(matches, vec![0, 7]);
     }
 
     #[test]
@@ -111,11 +118,11 @@ mod tests {
 
         // Delete from text
         let matches = trie.find_edit_distance("abcdefg", 1);
-        assert_eq!(matches, vec![0]);
+        compare_matches(matches, vec![0]);
 
         // Delete from pattern
         let matches = trie.find_edit_distance("aXbc", 1);
-        assert_eq!(matches, vec![0]);
+        compare_matches(matches, vec![0]);
     }
 
     #[test]
@@ -127,16 +134,16 @@ mod tests {
         ignored.insert('e', true);
         ignored.insert('\'', true);
         let matches = trie.find_edit_distance_ignore("wrackd", 0, ignored.clone());
-        assert_eq!(matches, vec![3, 11, 19]);
+        compare_matches(matches, vec![3, 11, 19]);
         let matches = trie.find_edit_distance_ignore("wrack'de", 0, ignored.clone());
-        assert_eq!(matches, vec![3, 11, 19]);
+        compare_matches(matches, vec![3, 11, 19]);
     }
 
     fn find_single_wildcard() {
         let trie = SuffixTrie::new("oh this and that");
         println!("Result is {:#?}", trie);
         let matches = trie.find_edit_distance_ignore("th??", 0, HashMap::new());
-        assert_eq!(matches, vec![3, 12]);
+        compare_matches(matches, vec![3, 12]);
     }
 
     #[test]
@@ -156,6 +163,52 @@ mod tests {
 
 const SINGLE_WILDCARD: char = '?';
 
+#[derive(Clone,Copy,Debug,Eq,Serialize,Deserialize)]
+struct Leaf {
+    index_in_str: usize,
+    text_index: usize,
+}
+
+impl Ord for Leaf {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.text_index, self.index_in_str).cmp(&(other.text_index, other.index_in_str))
+    }
+}
+
+impl PartialOrd for Leaf {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Leaf {
+    fn eq(&self, other: &Self) -> bool {
+        (self.text_index, self.index_in_str) == (other.text_index, other.index_in_str)
+    }
+}
+
+impl Leaf {
+    fn new(index_in_str: usize, text_index: usize) -> Self {
+        Leaf {
+            index_in_str,
+            text_index,
+        }
+    }
+}
+
+#[derive(Debug,Serialize,Deserialize)]
+struct Text {
+    name: String,
+}
+
+impl Text {
+    fn new(name: &str) -> Self {
+        Text {
+            name: name.to_string(),
+        }
+    }
+}
+
 #[derive(Clone,Copy,Debug)]
 struct Match {
     node_index: usize,
@@ -169,6 +222,9 @@ struct SuffixTrie {
     str_storage: String,
     // Place to store all the nodes
     node_storage: Vec<SubTrie>,
+    // Information about each of the texts (e.g. files) included in
+    // the Suffix Trie
+    texts: Vec<Text>,
 }
 
 #[derive(Debug,Serialize,Deserialize)]
@@ -179,7 +235,7 @@ struct SubTrie {
     // from the parent to the child
     children: HashMap<char, usize>,
     // List of indices at which this suffix is present
-    leaf_children: Vec<usize>,
+    leaf_children: Vec<Leaf>,
 }
 
 impl Match {
@@ -196,7 +252,7 @@ impl SuffixTrie {
     /// New suffix trie containing suffixes of a single string
     fn new(string: &str) -> Self {
         let mut suffix_trie = SuffixTrie::empty();
-        suffix_trie.add_string_suffixes(string);
+        suffix_trie.add_string_suffixes(string, "first text");
         suffix_trie
     }
 
@@ -206,32 +262,33 @@ impl SuffixTrie {
         let mut suffix_trie = SuffixTrie {
             str_storage: String::from(""),
             node_storage: vec![root_node],
+            texts: vec![],
         };
         suffix_trie
     }
 
     /// New suffix trie containing the suffixes of each sentence from
     /// the given file
-    fn from_file<P: AsRef<Path>>(path: P) -> Result<SuffixTrie, io::Error> {
+    fn from_file(path: &str) -> Result<SuffixTrie, io::Error> {
         let mut suffix_trie = SuffixTrie::empty();
         suffix_trie.add_file(path)?;
         Ok(suffix_trie)
     }
 
-    fn add_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), io::Error> {
+    fn add_file(&mut self, path: &str) -> Result<(), io::Error> {
         println!("Attempting to read contents");
         let contents = fs::read_to_string(path)?;
         println!("Attempting to read contents");
         let sentences: Vec<&str> = contents.split(".").collect();
         for sentence in sentences {
-            self.add_string_suffixes(sentence);
+            self.add_string_suffixes(sentence, path);
         }
         Ok(())
     }
 
     /// New suffix trie containing the suffixes of each sentence from
     /// each file in the given directory
-    fn from_directory<P: AsRef<Path>>(path: P) -> Result<SuffixTrie, io::Error> {
+    fn from_directory(path: &str) -> Result<SuffixTrie, io::Error> {
         let mut suffix_trie = SuffixTrie::empty();
 
         println!("Attempting to read directory");
@@ -240,22 +297,30 @@ impl SuffixTrie {
             println!("Attempting to read file {:?}", file);
             let file = file?;
             println!("Attempting to read file {:?}", file.path());
-            suffix_trie.add_file(file.path())?;
+            match file.path().to_str() {
+                Some(path) => suffix_trie.add_file(path)?,
+                None => return Err(Error::new(ErrorKind::InvalidInput,
+                                              "Failed to convert path to string")),
+            }
         }
         Ok(suffix_trie)
     }
 
     /// Add the suffixes of a string to the suffix trie
-    fn add_string_suffixes(&mut self, string: &str) {
+    fn add_string_suffixes(&mut self, string: &str, string_name: &str) {
         self.str_storage.push_str(string.clone());
+        self.texts.push(Text::new(string_name));
+        let text_index = self.texts.len() - 1;
 
         for (index, _c) in string.char_indices() {
             let suffix = &string[index..];
-            self.add_suffix(suffix, index);
+            self.add_suffix(suffix, index, text_index);
         }
     }
 
-    fn add_suffix(&mut self, string: &str, string_key: usize) {
+    fn add_suffix(&mut self, string: &str,
+                  index_in_text: usize,
+                  text_index: usize) {
         let mut parent_index = 0;
 
         for c in string.chars() {
@@ -264,7 +329,7 @@ impl SuffixTrie {
         }
 
         let parent: &mut SubTrie = self.get_node_mut(parent_index);
-        parent.add_leaf_child(string_key);
+        parent.add_leaf_child(Leaf::new(index_in_text, text_index));
     }
 
     fn add_node(&mut self, edge: char, parent_index: usize) -> usize {
@@ -306,7 +371,7 @@ impl SuffixTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
     }
 
-    fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
+    fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<Leaf> {
         self.find_edit_distance_ignore(pattern, max_errors, HashMap::new())
     }
 
@@ -314,7 +379,7 @@ impl SuffixTrie {
                                  pattern: &str,
                                  max_errors: usize,
                                  ignored_characters: HashMap<char, bool>)
-        -> Vec<usize> {
+        -> Vec<Leaf> {
         let mut matcher = SuffixTrieEditMatcher::new(max_errors,
                                                  ignored_characters);
         matcher.find_edit_distance_ignore(&self, pattern)
@@ -322,7 +387,7 @@ impl SuffixTrie {
 
 
     /// Find all exact matches of the given pattern
-    fn find_exact(&self, pattern: &str) -> Vec<usize> {
+    fn find_exact(&self, pattern: &str) -> Vec<Leaf> {
         let mut parent: &SubTrie = self.get_node(0);
         for c in pattern.chars() {
             let child = parent.get_child_index(c);
@@ -340,7 +405,7 @@ impl SuffixTrie {
         self.node_storage.len()
     }
 
-    fn get_all_leaf_descendants(&self, node_index: usize) -> Vec<usize> {
+    fn get_all_leaf_descendants(&self, node_index: usize) -> Vec<Leaf> {
         let mut leaves = Vec::new();
         let mut to_process: Vec<usize> = vec![node_index];
         while let Some(index) = to_process.pop() {
@@ -350,7 +415,7 @@ impl SuffixTrie {
             to_process.extend(&children);
         }
         leaves.sort();
-        leaves
+        leaves.clone()
     }
 
     fn _unsafe_add_child_to_parent(&mut self,
@@ -377,7 +442,7 @@ impl SubTrie {
         self.children.get(&edge)
     }
 
-    fn add_leaf_child(&mut self, key: usize) {
+    fn add_leaf_child(&mut self, key: Leaf) {
         self.leaf_children.push(key);
     }
 }
@@ -521,7 +586,7 @@ impl SuffixTrieEditMatcher {
     fn find_edit_distance_ignore(&mut self,
                                  suffix_trie: &SuffixTrie,
                                  pattern: &str)
-        -> Vec<usize> {
+        -> Vec<Leaf> {
 
         // Keep track of matches and how many errors they have so far
         for c in pattern.chars() {
@@ -559,6 +624,6 @@ impl SuffixTrieEditMatcher {
             leaves.extend(leaf_children);
         }
         leaves.sort();
-        leaves
+        leaves.clone()
     }
 }
