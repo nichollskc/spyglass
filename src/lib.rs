@@ -96,23 +96,20 @@ mod tests {
 
     #[test]
     fn find_matches_mismatch() {
-        let trie = SuffixTrie::new("barbazbanboo");
+        let trie = SuffixTrie::new("abcXef abXdef");
         println!("Result is {:#?}", trie);
 
-        let matches = trie.find_edit_distance("bar", 1);
-        assert_eq!(matches, vec![0, 3, 6]);
-
-        let matches = trie.find_edit_distance("bar", 2);
-        assert_eq!(matches, vec![0, 3, 6, 9]);
+        let matches = trie.find_edit_distance("abcdef", 1);
+        assert_eq!(matches, vec![0, 7]);
     }
 
     #[test]
     fn find_matches_insert_delete() {
-        let trie = SuffixTrie::new("abcXd");
+        let trie = SuffixTrie::new("abcXdefg");
         println!("Result is {:#?}", trie);
 
         // Delete from text
-        let matches = trie.find_edit_distance("abcd", 1);
+        let matches = trie.find_edit_distance("abcdefg", 1);
         assert_eq!(matches, vec![0]);
 
         // Delete from pattern
