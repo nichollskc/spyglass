@@ -146,9 +146,9 @@ mod tests {
 
     #[test]
     fn bench_real_canon() {
-        let trie = SuffixTrie::from_directory("/Users/kath/docs/Programming/flaskreact/react-flask-app/texts/search/");
+        let trie = SuffixTrie::from_directory("resources/tests/large_1000/");
         match trie {
-            Ok(trie) => println!("{:?}", trie.find_exact("cannon's mouth")),
+            Ok(trie) => println!("{:?}", trie.find_exact("love")),
             Err(e) => println!("{:#?}", e),
         }
     }
