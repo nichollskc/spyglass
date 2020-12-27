@@ -1,3 +1,5 @@
+use std::fs;
+use std::io;
 use std::collections::{HashMap,HashSet};
 use bincode;
 use serde::{Serialize,Deserialize};
@@ -109,6 +111,11 @@ mod tests {
         let matches = trie.find_all_partial_ignore("th??", 0, true, HashMap::new());
         assert_eq!(matches, vec![3, 12]);
     }
+
+    #[test]
+    fn construct_trie_from_file() {
+        let trie = SuffixTrie::from_file("resources/tests/small.txt");
+    }
 }
 
 const SINGLE_WILDCARD: char = '?';
@@ -149,17 +156,38 @@ impl Match {
 
 impl SuffixTrie {
     fn new(string: &str) -> Self {
+        let mut suffix_trie = SuffixTrie::empty();
+        suffix_trie.add_string(string);
+        suffix_trie
+    }
+
+    fn empty() -> Self {
         let root_node = SubTrie::empty(0);
         let mut suffix_trie = SuffixTrie {
-            str_storage: String::from(string.clone()) + "$0",
+            str_storage: String::from(""),
             node_storage: vec![root_node],
         };
+        suffix_trie
+    }
+
+    fn add_string(&mut self, string: &str) {
+        self.str_storage.push_str(string.clone());
 
         for (index, _c) in string.char_indices() {
             let suffix = &string[index..];
-            suffix_trie.add_string(suffix, index);
+            self.add_suffix(suffix, index);
         }
-        suffix_trie
+    }
+
+    fn from_file(filename: &str) -> Result<SuffixTrie, io::Error> {
+        let contents = fs::read_to_string(filename)?;
+        let sentences: Vec<&str> = contents.split(".").collect();
+
+        let mut suffix_trie = SuffixTrie::empty();
+        for sentence in sentences {
+            suffix_trie.add_string(sentence);
+        }
+        Ok(suffix_trie)
     }
 
     fn len(&self) -> usize {
@@ -205,7 +233,7 @@ impl SuffixTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
     }
 
-    fn add_string(&mut self, string: &str, string_key: usize) {
+    fn add_suffix(&mut self, string: &str, string_key: usize) {
         let mut parent_index = 0;
 
         for c in string.chars() {
