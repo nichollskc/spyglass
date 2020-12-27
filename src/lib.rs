@@ -1,6 +1,7 @@
 use std::cmp;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::collections::{HashMap,HashSet};
 use bincode;
 use serde::{Serialize,Deserialize};
@@ -142,6 +143,15 @@ mod tests {
     fn construct_trie_from_file() {
         let trie = SuffixTrie::from_file("resources/tests/small.txt");
     }
+
+    #[test]
+    fn bench_real_canon() {
+        let trie = SuffixTrie::from_directory("/Users/kath/docs/Programming/flaskreact/react-flask-app/texts/search/");
+        match trie {
+            Ok(trie) => println!("{:?}", trie.find_exact("cannon's mouth")),
+            Err(e) => println!("{:#?}", e),
+        }
+    }
 }
 
 const SINGLE_WILDCARD: char = '?';
@@ -202,13 +212,35 @@ impl SuffixTrie {
 
     /// New suffix trie containing the suffixes of each sentence from
     /// the given file
-    fn from_file(filename: &str) -> Result<SuffixTrie, io::Error> {
-        let contents = fs::read_to_string(filename)?;
-        let sentences: Vec<&str> = contents.split(".").collect();
-
+    fn from_file<P: AsRef<Path>>(path: P) -> Result<SuffixTrie, io::Error> {
         let mut suffix_trie = SuffixTrie::empty();
+        suffix_trie.add_file(path)?;
+        Ok(suffix_trie)
+    }
+
+    fn add_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), io::Error> {
+        println!("Attempting to read contents");
+        let contents = fs::read_to_string(path)?;
+        println!("Attempting to read contents");
+        let sentences: Vec<&str> = contents.split(".").collect();
         for sentence in sentences {
-            suffix_trie.add_string_suffixes(sentence);
+            self.add_string_suffixes(sentence);
+        }
+        Ok(())
+    }
+
+    /// New suffix trie containing the suffixes of each sentence from
+    /// each file in the given directory
+    fn from_directory<P: AsRef<Path>>(path: P) -> Result<SuffixTrie, io::Error> {
+        let mut suffix_trie = SuffixTrie::empty();
+
+        println!("Attempting to read directory");
+        let files = fs::read_dir(path)?;
+        for file in files {
+            println!("Attempting to read file {:?}", file);
+            let file = file?;
+            println!("Attempting to read file {:?}", file.path());
+            suffix_trie.add_file(file.path())?;
         }
         Ok(suffix_trie)
     }
