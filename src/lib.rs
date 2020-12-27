@@ -150,6 +150,7 @@ const SINGLE_WILDCARD: char = '?';
 struct Match {
     node_index: usize,
     errors: usize,
+    length: usize,
 }
 
 #[derive(Debug,Serialize,Deserialize)]
@@ -172,10 +173,11 @@ struct SubTrie {
 }
 
 impl Match {
-    fn new(node_index: usize, errors: usize) -> Self {
+    fn new(node_index: usize, errors: usize, length: usize) -> Self {
         Match {
             node_index,
             errors,
+            length,
         }
     }
 }
@@ -364,23 +366,24 @@ impl MatchesSet {
 
     fn only_root_node() -> Self {
         let mut matches_set = MatchesSet::empty();
-        matches_set.add_match(0, 0);
+        matches_set.add_match(0, 0, 0);
         matches_set
     }
 
-    fn add_match(&mut self, index: usize, errors: usize) {
+    fn add_match(&mut self, index: usize, errors: usize, length: usize) {
         let mut min_errors = errors;
         if let Some(existing_match) = self.matches.get(&index) {
             // We will reinsert this index with the minimum number of errors
             // we have found - there are multiple paths leading to the same
             // node
+            println!("Updating! existing match is {:?} but we now have one with length {} and errors {}", existing_match, length, errors);
             min_errors = cmp::min(errors, existing_match.errors);
         } else {
             // This entry didn't already exist, add to vec of indices
             self.indices.push(index);
         }
         // Update the error count for this node
-        let match_obj = Match::new(index, errors);
+        let match_obj = Match::new(index, min_errors, length);
         self.matches.insert(index, match_obj);
     }
 
@@ -423,28 +426,33 @@ impl SuffixTrieEditMatcher {
         }
     }
 
-    fn add_this_generation(&mut self, errors: usize, index: usize) {
+    fn add_this_generation(&mut self, errors: usize, index: usize, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
         if errors <= self.max_errors {
-            self.matches_this_gen.add_match(index, errors);
+            self.matches_this_gen.add_match(index, errors, length);
         }
     }
 
-    fn add_next_generation(&mut self, errors: usize, index: usize) {
+    fn add_next_generation(&mut self, errors: usize, index: usize, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
         if errors <= self.max_errors {
-            self.matches_next_gen.add_match(index, errors);
+            self.matches_next_gen.add_match(index, errors, length);
         }
     }
 
-    fn add_after_text_delete(&mut self, existing_errors: usize, index: usize) {
-        println!("Adding node {} with errors {} - deletion from text", index, existing_errors + 1);
-        self.add_this_generation(existing_errors + 1, index);
+    fn add_after_pattern_delete(&mut self, existing_match: Match) {
+        self.add_next_generation(existing_match.errors + 1,
+                                 existing_match.node_index,
+                                 existing_match.length);
     }
 
-    fn add_after_pattern_delete(&mut self, existing_errors: usize, index: usize) {
-        println!("Adding node {} with errors {} - deletion from pattern", index, existing_errors + 1);
-        self.add_next_generation(existing_errors + 1, index);
+    fn add_after_text_delete(&mut self,
+                             existing_errors: usize,
+                             child_index: usize,
+                             existing_length: usize) {
+        self.add_this_generation(existing_errors + 1,
+                                 child_index,
+                                 existing_length + 1);
     }
 
     /// Process a possible match/mismatch between the current
@@ -454,6 +462,7 @@ impl SuffixTrieEditMatcher {
     /// increases error by 1.
     fn add_after_mismatch(&mut self,
                           existing_errors: usize,
+                          existing_length: usize,
                           child_index: usize,
                           pattern_char: &char,
                           edge: &char) {
@@ -469,7 +478,9 @@ impl SuffixTrieEditMatcher {
             errors_after_match += 1;
         }
         println!("Adding node {} with errors {} - match/mismatch", child_index, errors_after_match);
-        self.add_next_generation(errors_after_match, child_index);
+        self.add_next_generation(errors_after_match,
+                                 child_index,
+                                 existing_length + 1);
     }
 
     fn go_to_next_generation(&mut self) {
@@ -487,13 +498,21 @@ impl SuffixTrieEditMatcher {
             println!("Matching char: {}", c);
             println!("Matching nodes: {:#?}", self);
             while let Some(parent_match) = self.matches_this_gen.next() {
+                println!("Parent match: {:?}", parent_match);
                 let parent = suffix_trie.get_node(parent_match.node_index);
                 for (edge, child_index) in parent.children.iter() {
                     println!("Considering child {}", edge);
                     let existing_errors = parent_match.errors;
-                    self.add_after_mismatch(existing_errors, *child_index, &c, &edge);
-                    self.add_after_pattern_delete(existing_errors, parent_match.node_index);
-                    self.add_after_text_delete(existing_errors, *child_index);
+                    let existing_length = parent_match.length;
+                    self.add_after_mismatch(existing_errors,
+                                            existing_length,
+                                            *child_index,
+                                            &c,
+                                            &edge);
+                    self.add_after_pattern_delete(parent_match);
+                    self.add_after_text_delete(existing_errors,
+                                               *child_index,
+                                               existing_length);
                 }
                 println!("Left this gen {:#?}", self.matches_this_gen);
                 println!("Left next gen: {:#?}", self.matches_next_gen);
