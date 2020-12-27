@@ -156,12 +156,14 @@ impl Match {
 
 impl SuffixTrie {
     fn new(string: &str) -> Self {
+        /// New suffix trie containing suffixes of a single string
         let mut suffix_trie = SuffixTrie::empty();
         suffix_trie.add_string_suffixes(string);
         suffix_trie
     }
 
     fn empty() -> Self {
+        /// New empty suffix trie
         let root_node = SubTrie::empty(0);
         let mut suffix_trie = SuffixTrie {
             str_storage: String::from(""),
@@ -171,6 +173,8 @@ impl SuffixTrie {
     }
 
     fn from_file(filename: &str) -> Result<SuffixTrie, io::Error> {
+        /// New suffix trie containing the suffixes of each sentence from
+        /// the given file
         let contents = fs::read_to_string(filename)?;
         let sentences: Vec<&str> = contents.split(".").collect();
 
@@ -182,6 +186,7 @@ impl SuffixTrie {
     }
 
     fn add_string_suffixes(&mut self, string: &str) {
+        /// Add the suffixes of a string to the suffix trie
         self.str_storage.push_str(string.clone());
 
         for (index, _c) in string.char_indices() {
@@ -305,6 +310,7 @@ impl SuffixTrie {
     }
 
     fn find_all(&self, pattern: &str) -> Vec<usize> {
+        /// Find all exact matches of the given pattern
         let mut parent: &SubTrie = self.get_node(0);
         for c in pattern.chars() {
             let child = parent.get_child_index(c);
