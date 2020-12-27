@@ -447,12 +447,11 @@ impl SuffixTrieEditMatcher {
     }
 
     fn add_after_text_delete(&mut self,
-                             existing_errors: usize,
-                             child_index: usize,
-                             existing_length: usize) {
-        self.add_this_generation(existing_errors + 1,
+                             existing_match: Match,
+                             child_index: usize) {
+        self.add_this_generation(existing_match.errors + 1,
                                  child_index,
-                                 existing_length + 1);
+                                 existing_match.length + 1);
     }
 
     /// Process a possible match/mismatch between the current
@@ -461,12 +460,11 @@ impl SuffixTrieEditMatcher {
     /// then don't increment the error. Otherwise, it is a mismatch and
     /// increases error by 1.
     fn add_after_mismatch(&mut self,
-                          existing_errors: usize,
-                          existing_length: usize,
+                          existing_match: Match,
                           child_index: usize,
                           pattern_char: &char,
                           edge: &char) {
-        let mut errors_after_match = existing_errors;
+        let mut errors_after_match = existing_match.errors;
         if edge == pattern_char {
             // If the edge matches the character this doesn't add an error
         } else if self.ignored_characters.contains_key(edge) {
@@ -480,7 +478,7 @@ impl SuffixTrieEditMatcher {
         println!("Adding node {} with errors {} - match/mismatch", child_index, errors_after_match);
         self.add_next_generation(errors_after_match,
                                  child_index,
-                                 existing_length + 1);
+                                 existing_match.length + 1);
     }
 
     fn go_to_next_generation(&mut self) {
@@ -502,17 +500,13 @@ impl SuffixTrieEditMatcher {
                 let parent = suffix_trie.get_node(parent_match.node_index);
                 for (edge, child_index) in parent.children.iter() {
                     println!("Considering child {}", edge);
-                    let existing_errors = parent_match.errors;
-                    let existing_length = parent_match.length;
-                    self.add_after_mismatch(existing_errors,
-                                            existing_length,
+                    self.add_after_mismatch(parent_match,
                                             *child_index,
                                             &c,
                                             &edge);
                     self.add_after_pattern_delete(parent_match);
-                    self.add_after_text_delete(existing_errors,
-                                               *child_index,
-                                               existing_length);
+                    self.add_after_text_delete(parent_match,
+                                               *child_index);
                 }
                 println!("Left this gen {:#?}", self.matches_this_gen);
                 println!("Left next gen: {:#?}", self.matches_next_gen);
