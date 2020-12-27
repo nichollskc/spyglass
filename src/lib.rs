@@ -1,3 +1,4 @@
+use std::cmp;
 use std::fs;
 use std::io;
 use std::collections::{HashMap,HashSet};
@@ -62,32 +63,61 @@ mod tests {
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
 
-        let matches = trie.find_all("a");
+        let matches = trie.find_exact("a");
         assert_eq!(matches, vec![0, 2]);
 
         let trie = SuffixTrie::new("bananaBal");
         println!("Result is {:#?}", trie);
 
-        let matches = trie.find_all("an");
+        let matches = trie.find_exact("an");
         assert_eq!(matches, vec![1, 3]);
 
-        let matches = trie.find_all("ab");
+        let matches = trie.find_exact("ab");
         assert_eq!(matches, vec![]);
     }
 
     #[test]
-    fn find_partial_matches() {
+    fn find_matches_0_edit() {
+        let trie = SuffixTrie::new("aba");
+        println!("Result is {:#?}", trie);
+
+        let matches = trie.find_edit_distance("a", 0);
+        assert_eq!(matches, vec![0, 2]);
+
+        let trie = SuffixTrie::new("bananaBal");
+        println!("Result is {:#?}", trie);
+
+        let matches = trie.find_edit_distance("an", 0);
+        assert_eq!(matches, vec![1, 3]);
+
+        let matches = trie.find_edit_distance("ab", 0);
+        assert_eq!(matches, vec![]);
+    }
+
+    #[test]
+    fn find_matches_mismatch() {
         let trie = SuffixTrie::new("barbazbanboo");
         println!("Result is {:#?}", trie);
 
-        let matches = trie.find_all_partial("bar", 1);
+        let matches = trie.find_edit_distance("bar", 1);
         assert_eq!(matches, vec![0, 3, 6]);
 
-        let matches = trie.find_all_partial("bar", 2);
+        let matches = trie.find_edit_distance("bar", 2);
         assert_eq!(matches, vec![0, 3, 6, 9]);
+    }
 
-        let matches = trie.find_all_partial("wrackd", 0);
-        assert_eq!(matches, vec![]);
+    #[test]
+    fn find_matches_insert_delete() {
+        let trie = SuffixTrie::new("abcXd");
+        println!("Result is {:#?}", trie);
+
+        // Delete from text
+        let matches = trie.find_edit_distance("abcd", 1);
+        assert_eq!(matches, vec![0]);
+
+        // Delete from pattern
+        let matches = trie.find_edit_distance("aXbc", 1);
+        assert_eq!(matches, vec![0]);
     }
 
     #[test]
@@ -98,17 +128,16 @@ mod tests {
         let mut ignored = HashMap::new();
         ignored.insert('e', true);
         ignored.insert('\'', true);
-        let matches = trie.find_all_partial_ignore("wrackd", 0, false, ignored.clone());
+        let matches = trie.find_edit_distance_ignore("wrackd", 0, ignored.clone());
         assert_eq!(matches, vec![3, 11, 19]);
-        let matches = trie.find_all_partial_ignore("wrack'de", 0, false, ignored.clone());
+        let matches = trie.find_edit_distance_ignore("wrack'de", 0, ignored.clone());
         assert_eq!(matches, vec![3, 11, 19]);
     }
 
-    #[test]
     fn find_single_wildcard() {
         let trie = SuffixTrie::new("oh this and that");
         println!("Result is {:#?}", trie);
-        let matches = trie.find_all_partial_ignore("th??", 0, true, HashMap::new());
+        let matches = trie.find_edit_distance_ignore("th??", 0, HashMap::new());
         assert_eq!(matches, vec![3, 12]);
     }
 
@@ -120,7 +149,7 @@ mod tests {
 
 const SINGLE_WILDCARD: char = '?';
 
-#[derive(Debug)]
+#[derive(Clone,Copy,Debug)]
 struct Match {
     node_index: usize,
     errors: usize,
@@ -155,15 +184,15 @@ impl Match {
 }
 
 impl SuffixTrie {
+    /// New suffix trie containing suffixes of a single string
     fn new(string: &str) -> Self {
-        /// New suffix trie containing suffixes of a single string
         let mut suffix_trie = SuffixTrie::empty();
         suffix_trie.add_string_suffixes(string);
         suffix_trie
     }
 
+    /// New empty suffix trie
     fn empty() -> Self {
-        /// New empty suffix trie
         let root_node = SubTrie::empty(0);
         let mut suffix_trie = SuffixTrie {
             str_storage: String::from(""),
@@ -172,9 +201,9 @@ impl SuffixTrie {
         suffix_trie
     }
 
+    /// New suffix trie containing the suffixes of each sentence from
+    /// the given file
     fn from_file(filename: &str) -> Result<SuffixTrie, io::Error> {
-        /// New suffix trie containing the suffixes of each sentence from
-        /// the given file
         let contents = fs::read_to_string(filename)?;
         let sentences: Vec<&str> = contents.split(".").collect();
 
@@ -185,8 +214,8 @@ impl SuffixTrie {
         Ok(suffix_trie)
     }
 
+    /// Add the suffixes of a string to the suffix trie
     fn add_string_suffixes(&mut self, string: &str) {
-        /// Add the suffixes of a string to the suffix trie
         self.str_storage.push_str(string.clone());
 
         for (index, _c) in string.char_indices() {
@@ -246,71 +275,23 @@ impl SuffixTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
     }
 
-    fn find_all_partial(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
-        self.find_all_partial_ignore(pattern, max_errors, false, HashMap::new())
+    fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
+        self.find_edit_distance_ignore(pattern, max_errors, HashMap::new())
     }
 
-    fn find_all_partial_ignore(&self,
-                               pattern: &str,
-                               max_errors: usize,
-                               wildcard: bool,
-                               ignored_characters: HashMap<char, bool>) -> Vec<usize> {
-        // Keep track of matches and how many errors they have so far
-        let mut matches_this_gen: Vec<Match> = vec![Match::new(0, 0)];
-        for c in pattern.chars().filter(|x| !ignored_characters.contains_key(x)) {
-            let mut matches_next_gen: Vec<Match> = Vec::new();
-            println!("Matching char: {}", c);
-            println!("Matching nodes: {:#?}", matches_this_gen);
-            while let Some(parent_match) = matches_this_gen.pop() {
-                let parent = self.get_node(parent_match.node_index);
-                for (edge, child_index) in parent.children.iter() {
-                    println!("Considering child {}", edge);
-                    let mut child_errors = parent_match.errors;
-                    let mut is_this_gen = false;
-                    if ignored_characters.contains_key(edge) {
-                        is_this_gen = true;
-                        println!("Can consume this edge for free");
-                    } else if wildcard && c == SINGLE_WILDCARD {
-                        // This doesn't count as an error
-                    } else if *edge == c {
-                        // This doesn't count as an error
-                    } else {
-                        child_errors += 1;
-                    }
-                    if child_errors <= max_errors {
-                        // This is still a partial match
-                        if is_this_gen {
-                            matches_this_gen.push(Match::new(*child_index,
-                                                             child_errors));
-                            println!("Adding child this gen");
-                        } else {
-                            matches_next_gen.push(Match::new(*child_index,
-                                                             child_errors));
-                            println!("Adding child next gen");
-                        }
-                    }
-                }
-                println!("Left this gen {:#?}", matches_this_gen);
-                println!("Left next gen: {:#?}", matches_next_gen);
-            }
-            if matches_next_gen.is_empty() {
-                // There are no partial matches
-                return Vec::new();
-            } else {
-                matches_this_gen = matches_next_gen;
-            }
-        }
-        let mut leaves = vec![];
-        for parent_match in matches_this_gen.iter() {
-            println!("Matching node: {:#?}", parent_match.node_index);
-            leaves.extend(self.get_all_leaf_descendants(parent_match.node_index));
-        }
-        leaves.sort();
-        leaves
+    fn find_edit_distance_ignore(&self,
+                                 pattern: &str,
+                                 max_errors: usize,
+                                 ignored_characters: HashMap<char, bool>)
+        -> Vec<usize> {
+        let mut matcher = SuffixTrieEditMatcher::new(max_errors,
+                                                 ignored_characters);
+        matcher.find_edit_distance_ignore(&self, pattern)
     }
 
-    fn find_all(&self, pattern: &str) -> Vec<usize> {
-        /// Find all exact matches of the given pattern
+
+    /// Find all exact matches of the given pattern
+    fn find_exact(&self, pattern: &str) -> Vec<usize> {
         let mut parent: &SubTrie = self.get_node(0);
         for c in pattern.chars() {
             let child = parent.get_child_index(c);
@@ -367,5 +348,175 @@ impl SubTrie {
 
     fn add_leaf_child(&mut self, key: usize) {
         self.leaf_children.push(key);
+    }
+}
+
+#[derive(Clone,Debug)]
+struct MatchesSet {
+    indices: Vec<usize>,
+    matches: HashMap<usize, Match>,
+}
+
+impl MatchesSet {
+    fn empty() -> Self {
+        MatchesSet {
+            indices: vec![],
+            matches: HashMap::new(),
+        }
+    }
+
+    fn only_root_node() -> Self {
+        let mut matches_set = MatchesSet::empty();
+        matches_set.add_match(0, 0);
+        matches_set
+    }
+
+    fn add_match(&mut self, index: usize, errors: usize) {
+        let mut min_errors = errors;
+        if let Some(existing_match) = self.matches.get(&index) {
+            // We will reinsert this index with the minimum number of errors
+            // we have found - there are multiple paths leading to the same
+            // node
+            min_errors = cmp::min(errors, existing_match.errors);
+        } else {
+            // This entry didn't already exist, add to vec of indices
+            self.indices.push(index);
+        }
+        // Update the error count for this node
+        let match_obj = Match::new(index, errors);
+        self.matches.insert(index, match_obj);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.indices.is_empty()
+    }
+}
+
+impl Iterator for MatchesSet {
+    type Item = Match;
+
+    fn next(&mut self) -> Option<Match> {
+        let next_index = self.indices.pop();
+        match next_index {
+            Some(index) => {
+                let match_obj = self.matches.remove(&index).expect("Corrupt MatchesSet object - no match object stored under index found in indices list");
+                Some(match_obj)
+            },
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct SuffixTrieEditMatcher {
+    matches_this_gen: MatchesSet,
+    matches_next_gen: MatchesSet,
+    ignored_characters: HashMap<char, bool>,
+    max_errors: usize,
+}
+
+impl SuffixTrieEditMatcher {
+    fn new(max_errors: usize,
+           ignored_characters: HashMap<char, bool>) -> Self {
+        SuffixTrieEditMatcher {
+            matches_this_gen: MatchesSet::only_root_node(),
+            matches_next_gen: MatchesSet::empty(),
+            ignored_characters,
+            max_errors,
+        }
+    }
+
+    fn add_this_generation(&mut self, errors: usize, index: usize) {
+        // Only add the match to the list if we haven't exceded the error limit
+        if errors <= self.max_errors {
+            self.matches_this_gen.add_match(index, errors);
+        }
+    }
+
+    fn add_next_generation(&mut self, errors: usize, index: usize) {
+        // Only add the match to the list if we haven't exceded the error limit
+        if errors <= self.max_errors {
+            self.matches_next_gen.add_match(index, errors);
+        }
+    }
+
+    fn add_after_text_delete(&mut self, existing_errors: usize, index: usize) {
+        println!("Adding node {} with errors {} - deletion from text", index, existing_errors + 1);
+        self.add_this_generation(existing_errors + 1, index);
+    }
+
+    fn add_after_pattern_delete(&mut self, existing_errors: usize, index: usize) {
+        println!("Adding node {} with errors {} - deletion from pattern", index, existing_errors + 1);
+        self.add_next_generation(existing_errors + 1, index);
+    }
+
+    /// Process a possible match/mismatch between the current
+    /// pattern character and the edge leading to this child
+    /// If they match, or if either is in the set of ignorable characters,
+    /// then don't increment the error. Otherwise, it is a mismatch and
+    /// increases error by 1.
+    fn add_after_mismatch(&mut self,
+                          existing_errors: usize,
+                          child_index: usize,
+                          pattern_char: &char,
+                          edge: &char) {
+        let mut errors_after_match = existing_errors;
+        if edge == pattern_char {
+            // If the edge matches the character this doesn't add an error
+        } else if self.ignored_characters.contains_key(edge) {
+            // If the character is in the list of ignorable characters this doesn't add an error
+        } else if self.ignored_characters.contains_key(pattern_char) {
+            // If the character is in the list of ignorable characters this doesn't add an error
+        } else {
+            // Else this is a mismatch - increment the error counter
+            errors_after_match += 1;
+        }
+        println!("Adding node {} with errors {} - match/mismatch", child_index, errors_after_match);
+        self.add_next_generation(errors_after_match, child_index);
+    }
+
+    fn go_to_next_generation(&mut self) {
+        self.matches_this_gen = self.matches_next_gen.clone();
+        self.matches_next_gen = MatchesSet::empty();
+    }
+
+    fn find_edit_distance_ignore(&mut self,
+                                 suffix_trie: &SuffixTrie,
+                                 pattern: &str)
+        -> Vec<usize> {
+
+        // Keep track of matches and how many errors they have so far
+        for c in pattern.chars() {
+            println!("Matching char: {}", c);
+            println!("Matching nodes: {:#?}", self);
+            while let Some(parent_match) = self.matches_this_gen.next() {
+                let parent = suffix_trie.get_node(parent_match.node_index);
+                for (edge, child_index) in parent.children.iter() {
+                    println!("Considering child {}", edge);
+                    let existing_errors = parent_match.errors;
+                    self.add_after_mismatch(existing_errors, *child_index, &c, &edge);
+                    self.add_after_pattern_delete(existing_errors, parent_match.node_index);
+                    self.add_after_text_delete(existing_errors, *child_index);
+                }
+                println!("Left this gen {:#?}", self.matches_this_gen);
+                println!("Left next gen: {:#?}", self.matches_next_gen);
+            }
+            if self.matches_next_gen.is_empty() {
+                // There are no partial matches
+                return Vec::new();
+            } else {
+                self.go_to_next_generation();
+            }
+        }
+        let mut leaves = vec![];
+        while let Some(parent_match) = self.matches_this_gen.next() {
+            let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.node_index);
+            println!("Matching node: {:#?} with children {:#?}",
+                     parent_match.node_index,
+                     leaf_children);
+            leaves.extend(leaf_children);
+        }
+        leaves.sort();
+        leaves
     }
 }
