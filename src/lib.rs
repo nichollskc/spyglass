@@ -149,11 +149,16 @@ mod tests {
     }
 
     #[test]
+    fn find_matches_sentences() {
+        let trie = SuffixTrie::from_file("resources/tests/small.txt").unwrap();
+        println!("{:?}", trie.find_exact("Some"));
+    }
+
+    #[test]
     fn construct_trie_from_file() {
         let trie = SuffixTrie::from_file("resources/tests/small.txt");
     }
 
-    #[test]
     fn bench_real_canon() {
         let trie = SuffixTrie::from_directory("resources/tests/large_1000/");
         match trie {
@@ -254,7 +259,8 @@ impl SuffixTrie {
     /// New suffix trie containing suffixes of a single string
     pub fn new(string: &str) -> Self {
         let mut suffix_trie = SuffixTrie::empty();
-        suffix_trie.add_string_suffixes(string, "first text");
+        suffix_trie.texts.push(Text::new("first text"));
+        suffix_trie.add_string_suffixes(string, 0, 0);
         suffix_trie
     }
 
@@ -280,8 +286,14 @@ impl SuffixTrie {
     pub fn add_file(&mut self, path: &str) -> Result<(), io::Error> {
         let contents = fs::read_to_string(path)?;
         let sentences: Vec<&str> = contents.split(".").collect();
+
+        self.texts.push(Text::new(path));
+        let text_index = self.texts.len() - 1;
+
+        let mut sentence_start = 0;
         for sentence in sentences {
-            self.add_string_suffixes(sentence, path);
+            self.add_string_suffixes(sentence, sentence_start, text_index);
+            sentence_start += sentence.len();
         }
         Ok(())
     }
@@ -305,14 +317,16 @@ impl SuffixTrie {
     }
 
     /// Add the suffixes of a string to the suffix trie
-    fn add_string_suffixes(&mut self, string: &str, string_name: &str) {
+    fn add_string_suffixes(&mut self,
+                           string: &str,
+                           start_index: usize,
+                           text_index: usize) {
         self.str_storage.push_str(string.clone());
-        self.texts.push(Text::new(string_name));
-        let text_index = self.texts.len() - 1;
 
         for (index, _c) in string.char_indices() {
             let suffix = &string[index..];
-            self.add_suffix(suffix, index, text_index);
+            let total_index = start_index + index;
+            self.add_suffix(suffix, total_index, text_index);
         }
     }
 
