@@ -25,3 +25,12 @@ Equivalent to `\w*` in regex
 5. Searching with list of ignorable characters
 
 E.g. ignoring vowels and punctuation `wracked` matches `rack'd` and `wrecked`
+
+# To do
+
+* Allow deterministic printing - hashmap keys are never sorted, so each time we print the keys are printed in random order
+* Matching with ? wildcard
+* Matching with * wildcard
+* Matching with ** wildcard
+* Return proper match object, includign line number of match
+* Deal with multiple matches of same line/section e.g. when edit distance is large
