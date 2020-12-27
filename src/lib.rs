@@ -157,7 +157,7 @@ impl Match {
 impl SuffixTrie {
     fn new(string: &str) -> Self {
         let mut suffix_trie = SuffixTrie::empty();
-        suffix_trie.add_string(string);
+        suffix_trie.add_string_suffixes(string);
         suffix_trie
     }
 
@@ -170,7 +170,18 @@ impl SuffixTrie {
         suffix_trie
     }
 
-    fn add_string(&mut self, string: &str) {
+    fn from_file(filename: &str) -> Result<SuffixTrie, io::Error> {
+        let contents = fs::read_to_string(filename)?;
+        let sentences: Vec<&str> = contents.split(".").collect();
+
+        let mut suffix_trie = SuffixTrie::empty();
+        for sentence in sentences {
+            suffix_trie.add_string_suffixes(sentence);
+        }
+        Ok(suffix_trie)
+    }
+
+    fn add_string_suffixes(&mut self, string: &str) {
         self.str_storage.push_str(string.clone());
 
         for (index, _c) in string.char_indices() {
@@ -179,19 +190,16 @@ impl SuffixTrie {
         }
     }
 
-    fn from_file(filename: &str) -> Result<SuffixTrie, io::Error> {
-        let contents = fs::read_to_string(filename)?;
-        let sentences: Vec<&str> = contents.split(".").collect();
+    fn add_suffix(&mut self, string: &str, string_key: usize) {
+        let mut parent_index = 0;
 
-        let mut suffix_trie = SuffixTrie::empty();
-        for sentence in sentences {
-            suffix_trie.add_string(sentence);
+        for c in string.chars() {
+            let child_index = self.add_edge(c, parent_index);
+            parent_index = child_index;
         }
-        Ok(suffix_trie)
-    }
 
-    fn len(&self) -> usize {
-        self.node_storage.len()
+        let parent: &mut SubTrie = self.get_node_mut(parent_index);
+        parent.add_leaf_child(string_key);
     }
 
     fn add_node(&mut self, edge: char, parent_index: usize) -> usize {
@@ -231,18 +239,6 @@ impl SuffixTrie {
 
     fn get_node_mut(&mut self, node_index: usize) -> &mut SubTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
-    }
-
-    fn add_suffix(&mut self, string: &str, string_key: usize) {
-        let mut parent_index = 0;
-
-        for c in string.chars() {
-            let child_index = self.add_edge(c, parent_index);
-            parent_index = child_index;
-        }
-
-        let parent: &mut SubTrie = self.get_node_mut(parent_index);
-        parent.add_leaf_child(string_key);
     }
 
     fn find_all_partial(&self, pattern: &str, max_errors: usize) -> Vec<usize> {
@@ -320,6 +316,10 @@ impl SuffixTrie {
             }
         }
         self.get_all_leaf_descendants(parent.node_index)
+    }
+
+    fn len(&self) -> usize {
+        self.node_storage.len()
     }
 
     fn get_all_leaf_descendants(&self, node_index: usize) -> Vec<usize> {
