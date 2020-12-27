@@ -5,7 +5,9 @@ use std::io;
 use std::io::{Error,ErrorKind};
 use std::path::Path;
 use std::collections::{HashMap,HashSet};
+
 use bincode;
+use log::{info,warn,debug,error};
 use serde::{Serialize,Deserialize};
 
 #[cfg(test)]
@@ -164,7 +166,7 @@ mod tests {
 const SINGLE_WILDCARD: char = '?';
 
 #[derive(Clone,Copy,Debug,Eq,Serialize,Deserialize)]
-struct Leaf {
+pub struct Leaf {
     index_in_str: usize,
     text_index: usize,
 }
@@ -217,7 +219,7 @@ struct Match {
 }
 
 #[derive(Debug,Serialize,Deserialize)]
-struct SuffixTrie {
+pub struct SuffixTrie {
     // Place to store entire string - keeps ownership simple
     str_storage: String,
     // Place to store all the nodes
@@ -250,14 +252,14 @@ impl Match {
 
 impl SuffixTrie {
     /// New suffix trie containing suffixes of a single string
-    fn new(string: &str) -> Self {
+    pub fn new(string: &str) -> Self {
         let mut suffix_trie = SuffixTrie::empty();
         suffix_trie.add_string_suffixes(string, "first text");
         suffix_trie
     }
 
     /// New empty suffix trie
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         let root_node = SubTrie::empty(0);
         let mut suffix_trie = SuffixTrie {
             str_storage: String::from(""),
@@ -269,16 +271,14 @@ impl SuffixTrie {
 
     /// New suffix trie containing the suffixes of each sentence from
     /// the given file
-    fn from_file(path: &str) -> Result<SuffixTrie, io::Error> {
+    pub fn from_file(path: &str) -> Result<SuffixTrie, io::Error> {
         let mut suffix_trie = SuffixTrie::empty();
         suffix_trie.add_file(path)?;
         Ok(suffix_trie)
     }
 
-    fn add_file(&mut self, path: &str) -> Result<(), io::Error> {
-        println!("Attempting to read contents");
+    pub fn add_file(&mut self, path: &str) -> Result<(), io::Error> {
         let contents = fs::read_to_string(path)?;
-        println!("Attempting to read contents");
         let sentences: Vec<&str> = contents.split(".").collect();
         for sentence in sentences {
             self.add_string_suffixes(sentence, path);
@@ -288,15 +288,13 @@ impl SuffixTrie {
 
     /// New suffix trie containing the suffixes of each sentence from
     /// each file in the given directory
-    fn from_directory(path: &str) -> Result<SuffixTrie, io::Error> {
+    pub fn from_directory(path: &str) -> Result<SuffixTrie, io::Error> {
         let mut suffix_trie = SuffixTrie::empty();
 
-        println!("Attempting to read directory");
         let files = fs::read_dir(path)?;
         for file in files {
-            println!("Attempting to read file {:?}", file);
+            info!("Attempting to read file {:?}", file);
             let file = file?;
-            println!("Attempting to read file {:?}", file.path());
             match file.path().to_str() {
                 Some(path) => suffix_trie.add_file(path)?,
                 None => return Err(Error::new(ErrorKind::InvalidInput,
@@ -371,11 +369,11 @@ impl SuffixTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
     }
 
-    fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<Leaf> {
+    pub fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<Leaf> {
         self.find_edit_distance_ignore(pattern, max_errors, HashMap::new())
     }
 
-    fn find_edit_distance_ignore(&self,
+    pub fn find_edit_distance_ignore(&self,
                                  pattern: &str,
                                  max_errors: usize,
                                  ignored_characters: HashMap<char, bool>)
@@ -387,7 +385,7 @@ impl SuffixTrie {
 
 
     /// Find all exact matches of the given pattern
-    fn find_exact(&self, pattern: &str) -> Vec<Leaf> {
+    pub fn find_exact(&self, pattern: &str) -> Vec<Leaf> {
         let mut parent: &SubTrie = self.get_node(0);
         for c in pattern.chars() {
             let child = parent.get_child_index(c);
@@ -473,7 +471,7 @@ impl MatchesSet {
             // We will reinsert this index with the minimum number of errors
             // we have found - there are multiple paths leading to the same
             // node
-            println!("Updating! existing match is {:?} but we now have one with length {} and errors {}", existing_match, length, errors);
+            debug!("Updating! existing match is {:?} but we now have one with length {} and errors {}", existing_match, length, errors);
             min_errors = cmp::min(errors, existing_match.errors);
         } else {
             // This entry didn't already exist, add to vec of indices
@@ -572,7 +570,7 @@ impl SuffixTrieEditMatcher {
             // Else this is a mismatch - increment the error counter
             errors_after_match += 1;
         }
-        println!("Adding node {} with errors {} - match/mismatch", child_index, errors_after_match);
+        debug!("Adding node {} with errors {} - match/mismatch", child_index, errors_after_match);
         self.add_next_generation(errors_after_match,
                                  child_index,
                                  existing_match.length + 1);
@@ -590,13 +588,13 @@ impl SuffixTrieEditMatcher {
 
         // Keep track of matches and how many errors they have so far
         for c in pattern.chars() {
-            println!("Matching char: {}", c);
-            println!("Matching nodes: {:#?}", self);
+            debug!("Matching char: {}", c);
+            debug!("Matching nodes: {:#?}", self);
             while let Some(parent_match) = self.matches_this_gen.next() {
-                println!("Parent match: {:?}", parent_match);
+                debug!("Parent match: {:?}", parent_match);
                 let parent = suffix_trie.get_node(parent_match.node_index);
                 for (edge, child_index) in parent.children.iter() {
-                    println!("Considering child {}", edge);
+                    debug!("Considering child {}", edge);
                     self.add_after_mismatch(parent_match,
                                             *child_index,
                                             &c,
@@ -605,8 +603,8 @@ impl SuffixTrieEditMatcher {
                     self.add_after_text_delete(parent_match,
                                                *child_index);
                 }
-                println!("Left this gen {:#?}", self.matches_this_gen);
-                println!("Left next gen: {:#?}", self.matches_next_gen);
+                debug!("Left this gen {:#?}", self.matches_this_gen);
+                debug!("Left next gen: {:#?}", self.matches_next_gen);
             }
             if self.matches_next_gen.is_empty() {
                 // There are no partial matches
@@ -618,7 +616,7 @@ impl SuffixTrieEditMatcher {
         let mut leaves = vec![];
         while let Some(parent_match) = self.matches_this_gen.next() {
             let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.node_index);
-            println!("Matching node: {:#?} with children {:#?}",
+            debug!("Matching node: {:#?} with children {:#?}",
                      parent_match.node_index,
                      leaf_children);
             leaves.extend(leaf_children);
