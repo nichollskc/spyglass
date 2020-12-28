@@ -217,7 +217,7 @@ impl Text {
 }
 
 #[derive(Clone,Copy,Debug)]
-struct Match {
+struct WorkingMatch {
     node_index: usize,
     errors: usize,
     length: usize,
@@ -245,9 +245,9 @@ struct SubTrie {
     leaf_children: Vec<Leaf>,
 }
 
-impl Match {
+impl WorkingMatch {
     fn new(node_index: usize, errors: usize, length: usize) -> Self {
-        Match {
+        WorkingMatch {
             node_index,
             errors,
             length,
@@ -397,7 +397,6 @@ impl SuffixTrie {
         matcher.find_edit_distance_ignore(&self, pattern)
     }
 
-
     /// Find all exact matches of the given pattern
     pub fn find_exact(&self, pattern: &str) -> Vec<Leaf> {
         let mut parent: &SubTrie = self.get_node(0);
@@ -460,28 +459,28 @@ impl SubTrie {
 }
 
 #[derive(Clone,Debug)]
-struct MatchesSet {
+struct WorkingMatchesSet {
     indices: Vec<usize>,
-    matches: HashMap<usize, Match>,
+    working_matches: HashMap<usize, WorkingMatch>,
 }
 
-impl MatchesSet {
+impl WorkingMatchesSet {
     fn empty() -> Self {
-        MatchesSet {
+        WorkingMatchesSet {
             indices: vec![],
-            matches: HashMap::new(),
+            working_matches: HashMap::new(),
         }
     }
 
     fn only_root_node() -> Self {
-        let mut matches_set = MatchesSet::empty();
-        matches_set.add_match(0, 0, 0);
-        matches_set
+        let mut working_matches_set = WorkingMatchesSet::empty();
+        working_matches_set.add_working_match(0, 0, 0);
+        working_matches_set
     }
 
-    fn add_match(&mut self, index: usize, errors: usize, length: usize) {
+    fn add_working_match(&mut self, index: usize, errors: usize, length: usize) {
         let mut min_errors = errors;
-        if let Some(existing_match) = self.matches.get(&index) {
+        if let Some(existing_match) = self.working_matches.get(&index) {
             // We will reinsert this index with the minimum number of errors
             // we have found - there are multiple paths leading to the same
             // node
@@ -492,8 +491,8 @@ impl MatchesSet {
             self.indices.push(index);
         }
         // Update the error count for this node
-        let match_obj = Match::new(index, min_errors, length);
-        self.matches.insert(index, match_obj);
+        let match_obj = WorkingMatch::new(index, min_errors, length);
+        self.working_matches.insert(index, match_obj);
     }
 
     fn is_empty(&self) -> bool {
@@ -501,14 +500,14 @@ impl MatchesSet {
     }
 }
 
-impl Iterator for MatchesSet {
-    type Item = Match;
+impl Iterator for WorkingMatchesSet {
+    type Item = WorkingMatch;
 
-    fn next(&mut self) -> Option<Match> {
+    fn next(&mut self) -> Option<WorkingMatch> {
         let next_index = self.indices.pop();
         match next_index {
             Some(index) => {
-                let match_obj = self.matches.remove(&index).expect("Corrupt MatchesSet object - no match object stored under index found in indices list");
+                let match_obj = self.working_matches.remove(&index).expect("Corrupt WorkingMatchesSet object - no match object stored under index found in indices list");
                 Some(match_obj)
             },
             None => None,
@@ -518,8 +517,8 @@ impl Iterator for MatchesSet {
 
 #[derive(Debug)]
 struct SuffixTrieEditMatcher {
-    matches_this_gen: MatchesSet,
-    matches_next_gen: MatchesSet,
+    matches_this_gen: WorkingMatchesSet,
+    matches_next_gen: WorkingMatchesSet,
     ignored_characters: HashMap<char, bool>,
     max_errors: usize,
 }
@@ -528,8 +527,8 @@ impl SuffixTrieEditMatcher {
     fn new(max_errors: usize,
            ignored_characters: HashMap<char, bool>) -> Self {
         SuffixTrieEditMatcher {
-            matches_this_gen: MatchesSet::only_root_node(),
-            matches_next_gen: MatchesSet::empty(),
+            matches_this_gen: WorkingMatchesSet::only_root_node(),
+            matches_next_gen: WorkingMatchesSet::empty(),
             ignored_characters,
             max_errors,
         }
@@ -538,25 +537,25 @@ impl SuffixTrieEditMatcher {
     fn add_this_generation(&mut self, errors: usize, index: usize, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
         if errors <= self.max_errors {
-            self.matches_this_gen.add_match(index, errors, length);
+            self.matches_this_gen.add_working_match(index, errors, length);
         }
     }
 
     fn add_next_generation(&mut self, errors: usize, index: usize, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
         if errors <= self.max_errors {
-            self.matches_next_gen.add_match(index, errors, length);
+            self.matches_next_gen.add_working_match(index, errors, length);
         }
     }
 
-    fn add_after_pattern_delete(&mut self, existing_match: Match) {
+    fn add_after_pattern_delete(&mut self, existing_match: WorkingMatch) {
         self.add_next_generation(existing_match.errors + 1,
                                  existing_match.node_index,
                                  existing_match.length);
     }
 
     fn add_after_text_delete(&mut self,
-                             existing_match: Match,
+                             existing_match: WorkingMatch,
                              child_index: usize) {
         self.add_this_generation(existing_match.errors + 1,
                                  child_index,
@@ -569,7 +568,7 @@ impl SuffixTrieEditMatcher {
     /// then don't increment the error. Otherwise, it is a mismatch and
     /// increases error by 1.
     fn add_after_mismatch(&mut self,
-                          existing_match: Match,
+                          existing_match: WorkingMatch,
                           child_index: usize,
                           pattern_char: &char,
                           edge: &char) {
@@ -592,7 +591,7 @@ impl SuffixTrieEditMatcher {
 
     fn go_to_next_generation(&mut self) {
         self.matches_this_gen = self.matches_next_gen.clone();
-        self.matches_next_gen = MatchesSet::empty();
+        self.matches_next_gen = WorkingMatchesSet::empty();
     }
 
     fn find_edit_distance_ignore(&mut self,
