@@ -173,9 +173,17 @@ mod tests {
     fn line_number_calculation() {
         init();
         let trie = SuffixTrie {
-            line_start_indices: vec![0, 10, 20, 30],
+            line_start_indices: vec![0, 10, 20, 30, 40, 50, 60, 70],
             ..SuffixTrie::empty()
         };
+        for index in 0..9 {
+            for line in 0..7 {
+                assert_eq!(trie.get_line_of_character(index + line*10), line);
+            }
+            for line in 8..10 {
+                assert_eq!(trie.get_line_of_character(index + line*10), 7);
+            }
+        }
         assert_eq!(trie.get_line_of_character(0), 0);
         assert_eq!(trie.get_line_of_character(1), 0);
         assert_eq!(trie.get_line_of_character(2), 0);
@@ -184,8 +192,7 @@ mod tests {
         assert_eq!(trie.get_line_of_character(29), 2);
         assert_eq!(trie.get_line_of_character(30), 3);
         assert_eq!(trie.get_line_of_character(31), 3);
-        assert_eq!(trie.get_line_of_character(39), 3);
-        assert_eq!(trie.get_line_of_character(139), 3);
+        assert_eq!(trie.get_line_of_character(139), 7);
     }
 
     #[test]
@@ -567,14 +574,15 @@ impl SuffixTrie {
         let mut lower_line_limit = 0;
         let mut upper_line_limit = match last_line {
             0 => 0,
-            ll => ll,
+            ll => ll - 1,
         };
         debug!("Finding index of line containing char index {}", char_index);
+        debug!("Line start indices are {:?}", self.line_start_indices);
         let mut current_line: usize = (upper_line_limit - lower_line_limit)/2;
         while !found && lower_line_limit != upper_line_limit {
+            debug!("Upper: {}, Lower: {}, Current: {}", upper_line_limit, lower_line_limit, current_line);
             assert!(lower_line_limit <= current_line);
             assert!(upper_line_limit >= current_line);
-            debug!("Upper: {}, Lower: {}, Current: {}", upper_line_limit, lower_line_limit, current_line);
             if self.char_before_line(char_index, current_line) {
                 // The character must be on an earlier line
                 upper_line_limit = cmp::max(current_line - 1, 0);
@@ -584,13 +592,14 @@ impl SuffixTrie {
                     // It must be on the current line, since it can't be later
                     // (it's before the next line)
                     found = true;
+                    debug!("Found matching line: {}", current_line);
                 } else {
                     // The character is on a later line
                     lower_line_limit = cmp::min(current_line + 1, last_line);
                 }
 
             }
-            current_line = (upper_line_limit - lower_line_limit)/2;
+            current_line = lower_line_limit + (upper_line_limit - lower_line_limit)/2;
         }
         current_line
     }
