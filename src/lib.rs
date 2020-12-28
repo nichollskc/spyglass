@@ -13,14 +13,20 @@ use serde::{Serialize,Deserialize};
 #[cfg(test)]
 mod tests {
     use super::*;
+    extern crate env_logger;
 
-    fn compare_matches(leaves: Vec<Leaf>, indices: Vec<usize>) {
-        let leaf_indices: Vec<usize> = leaves.iter().map(|l| l.index_in_str).collect();
-        assert_eq!(leaf_indices, indices);
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    fn compare_matches(matches: Vec<Match>, indices: Vec<usize>) {
+        let match_indices: Vec<usize> = matches.iter().map(|l| l.index_in_str).collect();
+        assert_eq!(match_indices, indices);
     }
 
     #[test]
     fn serialize_tests() {
+        init();
         serialize("aba", false);
         serialize("jfkds.}laN= -;a|ba", false);
         serialize("asab", false);
@@ -44,6 +50,7 @@ mod tests {
 
     #[test]
     fn test_size() {
+        init();
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
         assert_eq!(trie.len(), 6);
@@ -51,6 +58,7 @@ mod tests {
 
     #[test]
     fn test_leaves() {
+        init();
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
 
@@ -70,6 +78,7 @@ mod tests {
 
     #[test]
     fn find_matches() {
+        init();
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
 
@@ -88,6 +97,7 @@ mod tests {
 
     #[test]
     fn find_matches_0_edit() {
+        init();
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
 
@@ -106,6 +116,7 @@ mod tests {
 
     #[test]
     fn find_matches_mismatch() {
+        init();
         let trie = SuffixTrie::new("abcXef abXdef");
         println!("Result is {:#?}", trie);
 
@@ -115,6 +126,7 @@ mod tests {
 
     #[test]
     fn find_matches_insert_delete() {
+        init();
         let trie = SuffixTrie::new("abcXdefg");
         println!("Result is {:#?}", trie);
 
@@ -129,6 +141,7 @@ mod tests {
 
     #[test]
     fn find_partial_matches_ignore() {
+        init();
         let trie = SuffixTrie::new("He wracked wrack'd wrack'ed");
         println!("Result is {:#?}", trie);
 
@@ -142,6 +155,7 @@ mod tests {
     }
 
     fn find_single_wildcard() {
+        init();
         let trie = SuffixTrie::new("oh this and that");
         println!("Result is {:#?}", trie);
         let matches = trie.find_edit_distance_ignore("th??", 0, HashMap::new());
@@ -150,28 +164,93 @@ mod tests {
 
     #[test]
     fn find_matches_sentences() {
+        init();
         let trie = SuffixTrie::from_file("resources/tests/small.txt").unwrap();
         println!("{:?}", trie.find_exact("Some"));
     }
 
     #[test]
+    fn line_number_calculation() {
+        init();
+        let trie = SuffixTrie {
+            line_start_indices: vec![0, 10, 20, 30],
+            ..SuffixTrie::empty()
+        };
+        assert_eq!(trie.get_line_of_character(0), 0);
+        assert_eq!(trie.get_line_of_character(1), 0);
+        assert_eq!(trie.get_line_of_character(2), 0);
+        assert_eq!(trie.get_line_of_character(9), 0);
+        assert_eq!(trie.get_line_of_character(10), 1);
+        assert_eq!(trie.get_line_of_character(29), 2);
+        assert_eq!(trie.get_line_of_character(30), 3);
+        assert_eq!(trie.get_line_of_character(31), 3);
+        assert_eq!(trie.get_line_of_character(39), 3);
+        assert_eq!(trie.get_line_of_character(139), 3);
+    }
+
+    #[test]
     fn construct_trie_from_file() {
+        init();
         let trie = SuffixTrie::from_file("resources/tests/small.txt");
+        println!("Result is {:#?}", trie);
+        debug!("Test");
+        match trie {
+            Ok(trie) => println!("{:?}", trie.find_exact("drunken")),
+            Err(e) => println!("{:#?}", e),
+        }
     }
 
     fn bench_real_canon() {
+        init();
         let trie = SuffixTrie::from_directory("resources/tests/large_1000/");
         match trie {
             Ok(trie) => println!("{:?}", trie.find_exact("love")),
             Err(e) => println!("{:#?}", e),
         }
     }
+
 }
 
 const SINGLE_WILDCARD: char = '?';
 
 #[derive(Clone,Copy,Debug,Eq,Serialize,Deserialize)]
-pub struct Leaf {
+pub struct Match {
+    text_index: usize,
+    index_in_str: usize,
+    start_line: usize,
+    end_line: usize,
+    length: usize,
+    errors: usize,
+}
+
+impl Ord for Match {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.sort_key().cmp(&(other.sort_key()))
+    }
+}
+
+impl PartialOrd for Match {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Match {
+    fn eq(&self, other: &Self) -> bool {
+        self.sort_key() == other.sort_key()
+    }
+}
+
+impl Match {
+    fn sort_key(&self) -> (usize, usize, usize, usize) {
+        // Prefer matches which have fewer errors, are shorter, in earlier
+        // texts and earlier within the text in which they appear
+        (self.errors, self.length, self.text_index, self.index_in_str)
+    }
+}
+
+#[derive(Clone,Copy,Debug,Eq,Serialize,Deserialize)]
+struct Leaf {
     index_in_str: usize,
     text_index: usize,
 }
@@ -232,6 +311,8 @@ pub struct SuffixTrie {
     // Information about each of the texts (e.g. files) included in
     // the Suffix Trie
     texts: Vec<Text>,
+    // Indices of the starts of lines
+    line_start_indices: Vec<usize>,
 }
 
 #[derive(Debug,Serialize,Deserialize)]
@@ -271,6 +352,7 @@ impl SuffixTrie {
             str_storage: String::from(""),
             node_storage: vec![root_node],
             texts: vec![],
+            line_start_indices: vec![0],
         };
         suffix_trie
     }
@@ -323,7 +405,12 @@ impl SuffixTrie {
                            text_index: usize) {
         self.str_storage.push_str(string.clone());
 
-        for (index, _c) in string.char_indices() {
+        for (index, c) in string.char_indices() {
+            if c == '\n' {
+                self.line_start_indices.push(index + start_index);
+                debug!("Adding line to line_start_indices {:?}", self.line_start_indices);
+            }
+
             let suffix = &string[index..];
             let total_index = start_index + index;
             self.add_suffix(suffix, total_index, text_index);
@@ -383,7 +470,7 @@ impl SuffixTrie {
         self.node_storage.get_mut(node_index).expect("Node not found!")
     }
 
-    pub fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<Leaf> {
+    pub fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<Match> {
         self.find_edit_distance_ignore(pattern, max_errors, HashMap::new())
     }
 
@@ -391,14 +478,14 @@ impl SuffixTrie {
                                  pattern: &str,
                                  max_errors: usize,
                                  ignored_characters: HashMap<char, bool>)
-        -> Vec<Leaf> {
+        -> Vec<Match> {
         let mut matcher = SuffixTrieEditMatcher::new(max_errors,
                                                  ignored_characters);
         matcher.find_edit_distance_ignore(&self, pattern)
     }
 
     /// Find all exact matches of the given pattern
-    pub fn find_exact(&self, pattern: &str) -> Vec<Leaf> {
+    pub fn find_exact(&self, pattern: &str) -> Vec<Match> {
         let mut parent: &SubTrie = self.get_node(0);
         for c in pattern.chars() {
             let child = parent.get_child_index(c);
@@ -409,7 +496,10 @@ impl SuffixTrie {
                 None => return Vec::new()
             }
         }
-        self.get_all_leaf_descendants(parent.node_index)
+        let leaves = self.get_all_leaf_descendants(parent.node_index);
+        let mut matches = self.match_array_from_leaves(leaves, pattern.len(), 0);
+        matches.sort();
+        matches
     }
 
     fn len(&self) -> usize {
@@ -427,6 +517,91 @@ impl SuffixTrie {
         }
         leaves.sort();
         leaves.clone()
+    }
+
+    fn match_array_from_leaves(&self,
+                               leaves: Vec<Leaf>,
+                               length: usize,
+                               errors: usize) -> Vec<Match> {
+        let mut matches = vec![];
+
+        for leaf in leaves.iter() {
+            let (start_line, end_line) = self.get_lines_of_substring(leaf.index_in_str,
+                                                                     length);
+            let match_obj = Match {
+                text_index: leaf.text_index,
+                index_in_str: leaf.index_in_str,
+                start_line,
+                end_line,
+                length,
+                errors,
+            };
+            matches.push(match_obj);
+        }
+
+        matches
+    }
+
+    fn char_before_line(&self, char_index: usize, line_index: usize) -> bool {
+        let mut is_before_line;
+        if line_index == self.line_start_indices.len() {
+            // This is an invalid line index (too high) so the character
+            // must come on a line before this one
+            is_before_line = true;
+        } else if char_index < self.line_start_indices[line_index] {
+            // The character index is before the index of the start of this
+            // line, so the character comes before the line
+            is_before_line = true;
+        } else {
+            // Character index after the index of start of line, so character
+            // is on this line or afterwards
+            is_before_line = false;
+        }
+        is_before_line
+    }
+
+    fn get_line_of_character(&self, char_index: usize) -> usize {
+        // Find the last line_index smaller than char_index
+        let mut found = false;
+        let last_line = self.line_start_indices.len();
+        let mut lower_line_limit = 0;
+        let mut upper_line_limit = match last_line {
+            0 => 0,
+            ll => ll,
+        };
+        debug!("Finding index of line containing char index {}", char_index);
+        let mut current_line: usize = (upper_line_limit - lower_line_limit)/2;
+        while !found && lower_line_limit != upper_line_limit {
+            assert!(lower_line_limit <= current_line);
+            assert!(upper_line_limit >= current_line);
+            debug!("Upper: {}, Lower: {}, Current: {}", upper_line_limit, lower_line_limit, current_line);
+            if self.char_before_line(char_index, current_line) {
+                // The character must be on an earlier line
+                upper_line_limit = cmp::max(current_line - 1, 0);
+            } else {
+                // The character is on this line or later
+                if self.char_before_line(char_index, current_line + 1) {
+                    // It must be on the current line, since it can't be later
+                    // (it's before the next line)
+                    found = true;
+                } else {
+                    // The character is on a later line
+                    lower_line_limit = cmp::min(current_line + 1, last_line);
+                }
+
+            }
+            current_line = (upper_line_limit - lower_line_limit)/2;
+        }
+        current_line
+    }
+
+    /// Find the index of the line where this substring starts and the index
+    /// of the line where it ends
+    fn get_lines_of_substring(&self, start_index: usize, length: usize) -> (usize, usize) {
+        let start_line = self.get_line_of_character(start_index);
+        let end_line = self.get_line_of_character(start_index + length);
+
+        (start_line, end_line)
     }
 
     fn _unsafe_add_child_to_parent(&mut self,
@@ -597,7 +772,7 @@ impl SuffixTrieEditMatcher {
     fn find_edit_distance_ignore(&mut self,
                                  suffix_trie: &SuffixTrie,
                                  pattern: &str)
-        -> Vec<Leaf> {
+        -> Vec<Match> {
 
         // Keep track of matches and how many errors they have so far
         for c in pattern.chars() {
@@ -626,15 +801,18 @@ impl SuffixTrieEditMatcher {
                 self.go_to_next_generation();
             }
         }
-        let mut leaves = vec![];
+        let mut matches = vec![];
         while let Some(parent_match) = self.matches_this_gen.next() {
             let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.node_index);
             debug!("Matching node: {:#?} with children {:#?}",
-                     parent_match.node_index,
-                     leaf_children);
-            leaves.extend(leaf_children);
+                   parent_match.node_index,
+                   leaf_children);
+            let parent_matches = suffix_trie.match_array_from_leaves(leaf_children,
+                                                                     parent_match.length,
+                                                                     parent_match.errors);
+            matches.extend(parent_matches);
         }
-        leaves.sort();
-        leaves.clone()
+        matches.sort();
+        matches
     }
 }
