@@ -1,5 +1,5 @@
 [package]
-name = "suffix_trie"
+name = "suffixtrie"
 version = "0.1.0"
 authors = ["Kath Nicholls <nichollskc@gmail.com>"]
 edition = "2018"
