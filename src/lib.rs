@@ -54,6 +54,14 @@ mod tests {
         let trie = SuffixTrie::new("aba");
         println!("Result is {:#?}", trie);
         assert_eq!(trie.len(), 6);
+
+        let mut trie = SuffixTrie::empty();
+        trie.add_sentences_from_text("test", "ABCDE.ABCDE.ABCDE.");
+        println!("Result is {:#?}", trie);
+        assert_eq!(trie.len(), 1 + 5 + 4 + 3 + 2 + 1);
+        trie.add_sentences_from_text("duplicate", "ABCDE.ABCDE.ABCDE.");
+        println!("Result is {:#?}", trie);
+        assert_eq!(trie.len(), 1 + 5 + 4 + 3 + 2 + 1);
     }
 
     #[test]
@@ -220,14 +228,15 @@ mod tests {
 
 const SINGLE_WILDCARD: char = '?';
 
-#[derive(Clone,Copy,Debug,Eq,Serialize,Deserialize)]
+#[derive(Clone,Debug,Eq,Serialize,Deserialize)]
 pub struct Match {
-    text_index: usize,
-    index_in_str: usize,
-    start_line: usize,
-    end_line: usize,
-    length: usize,
-    errors: usize,
+    pub text_index: usize,
+    pub index_in_str: usize,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub length: usize,
+    pub errors: usize,
+    pub matching_lines: String,
 }
 
 impl Ord for Match {
@@ -374,9 +383,15 @@ impl SuffixTrie {
 
     pub fn add_file(&mut self, path: &str) -> Result<(), io::Error> {
         let contents = fs::read_to_string(path)?;
+        self.add_sentences_from_text(path, &contents);
+        Ok(())
+    }
+
+
+    pub fn add_sentences_from_text(&mut self, text_name: &str, contents: &str) {
         let sentences: Vec<&str> = contents.split(".").collect();
 
-        self.texts.push(Text::new(path));
+        self.texts.push(Text::new(text_name));
         let text_index = self.texts.len() - 1;
 
         let mut sentence_start = 0;
@@ -384,7 +399,6 @@ impl SuffixTrie {
             self.add_string_suffixes(sentence, sentence_start, text_index);
             sentence_start += sentence.len();
         }
-        Ok(())
     }
 
     /// New suffix trie containing the suffixes of each sentence from
@@ -542,6 +556,7 @@ impl SuffixTrie {
                 end_line,
                 length,
                 errors,
+                matching_lines: (self.str_storage[leaf.index_in_str .. leaf.index_in_str + length]).to_string(),
             };
             matches.push(match_obj);
         }
