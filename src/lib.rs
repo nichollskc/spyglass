@@ -463,7 +463,6 @@ impl SuffixTrie {
         for sentence in sentences {
             self.add_string_suffixes(sentence, sentence_start, text_index);
             sentence_start += sentence.len();
-            self.texts[text_index].last_index = sentence_start;
         }
     }
 
@@ -502,6 +501,7 @@ impl SuffixTrie {
             let total_index = start_index + index;
             self.add_suffix(suffix, total_index, text_index);
         }
+        self.texts[text_index].last_index += string.len();
     }
 
     fn add_suffix(&mut self, string: &str,
@@ -636,7 +636,7 @@ impl SuffixTrie {
                          lines_after: usize,
                          start_char_index: usize) -> String {
         let end_line = line_index + lines_after;
-        let end_char_index = if end_line >= text.line_start_indices.len() - 2 {
+        let end_char_index = if end_line + 2 >= text.line_start_indices.len() {
             // This is either beyond the end of the text, or is the very last
             // line. We must return the end of the text
             text.last_index
@@ -652,8 +652,12 @@ impl SuffixTrie {
                           line_index: usize,
                           lines_before: usize,
                           end_char_index: usize) -> String {
-        let start_line = cmp::max(0, line_index - lines_before);
-        let start_char_index = text.line_start_indices[start_line];
+        let start_char_index = if lines_before > line_index {
+            0
+        } else {
+            let start_line = line_index - lines_before;
+            text.line_start_indices[start_line]
+        };
         let length = end_char_index - start_char_index;
         self.owned_from_index(text, start_char_index, length)
     }
@@ -674,12 +678,12 @@ impl SuffixTrie {
                                              match_obj.length);
         let before = self.owned_lines_before(text,
                                              match_obj.start_line,
-                                             5,
+                                             2,
                                              match_obj.index_in_str);
         let after = self.owned_lines_after(text,
                                            match_obj.end_line,
-                                           5,
-                                           match_obj.index_in_str);
+                                           2,
+                                           match_obj.index_in_str + match_obj.length);
         (before, matching, after)
     }
 
