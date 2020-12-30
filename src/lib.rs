@@ -19,9 +19,15 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    fn compare_matches(matches: Vec<Match>, indices: Vec<usize>) {
+    fn compare_match_indices(matches: Vec<Match>, indices: Vec<usize>) {
         let match_indices: Vec<usize> = matches.iter().map(|l| l.index_in_str).collect();
         assert_eq!(match_indices, indices);
+    }
+
+    fn compare_matches(mut expected: Vec<Match>, mut matches: Vec<Match>) {
+        expected.sort();
+        matches.sort();
+        assert_eq!(expected, matches);
     }
 
     #[test]
@@ -91,16 +97,16 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_exact("a");
-        compare_matches(matches, vec![0, 2]);
+        compare_match_indices(matches, vec![0, 2]);
 
         let trie = SuffixTrie::new("bananaBal");
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_exact("an");
-        compare_matches(matches, vec![1, 3]);
+        compare_match_indices(matches, vec![1, 3]);
 
         let matches = trie.find_exact("ab");
-        compare_matches(matches, vec![]);
+        compare_match_indices(matches, vec![]);
     }
 
     #[test]
@@ -110,16 +116,16 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_edit_distance("a", 0);
-        compare_matches(matches, vec![0, 2]);
+        compare_match_indices(matches, vec![0, 2]);
 
         let trie = SuffixTrie::new("bananaBal");
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_edit_distance("an", 0);
-        compare_matches(matches, vec![1, 3]);
+        compare_match_indices(matches, vec![1, 3]);
 
         let matches = trie.find_edit_distance("ab", 0);
-        compare_matches(matches, vec![]);
+        compare_match_indices(matches, vec![]);
     }
 
     #[test]
@@ -129,7 +135,7 @@ mod tests {
         println!("Result is {:#?}", trie);
 
         let matches = trie.find_edit_distance("abcdef", 1);
-        compare_matches(matches, vec![0, 7]);
+        compare_match_indices(matches, vec![0, 7]);
     }
 
     #[test]
@@ -140,11 +146,11 @@ mod tests {
 
         // Delete from text
         let matches = trie.find_edit_distance("abcdefg", 1);
-        compare_matches(matches, vec![0]);
+        compare_match_indices(matches, vec![0]);
 
         // Delete from pattern
         let matches = trie.find_edit_distance("aXbc", 1);
-        compare_matches(matches, vec![0]);
+        compare_match_indices(matches, vec![0]);
     }
 
     #[test]
@@ -157,9 +163,9 @@ mod tests {
         ignored.insert('e', true);
         ignored.insert('\'', true);
         let matches = trie.find_edit_distance_ignore("wrackd", 0, ignored.clone());
-        compare_matches(matches, vec![3, 11, 19]);
+        compare_match_indices(matches, vec![3, 11, 19]);
         let matches = trie.find_edit_distance_ignore("wrack'de", 0, ignored.clone());
-        compare_matches(matches, vec![3, 11, 19]);
+        compare_match_indices(matches, vec![3, 11, 19]);
     }
 
     fn find_single_wildcard() {
@@ -167,13 +173,13 @@ mod tests {
         let trie = SuffixTrie::new("oh this and that");
         println!("Result is {:#?}", trie);
         let matches = trie.find_edit_distance_ignore("th??", 0, HashMap::new());
-        compare_matches(matches, vec![3, 12]);
+        compare_match_indices(matches, vec![3, 12]);
     }
 
     #[test]
     fn find_matches_sentences() {
         init();
-        let trie = SuffixTrie::from_file("resources/tests/small.txt").unwrap();
+        let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
         println!("{:?}", trie.find_exact("Some"));
     }
 
@@ -204,9 +210,69 @@ mod tests {
     }
 
     #[test]
+    fn matches_from_directory() {
+        init();
+        let mut trie = SuffixTrie::from_directory("./resources/tests/simple/").unwrap();
+        //# Try building up trie from individual files and check we get the same
+        let mut matches_A = trie.find_exact("ABCDEF");
+        let mut matches_E = trie.find_exact("EFGHIJ");
+        let mut matches_H = trie.find_exact("HIJ\nA");
+
+        let mut expected_A: Vec<Match> = vec![];
+        let mut expected_E: Vec<Match> = vec![];
+        let mut expected_H: Vec<Match> = vec![];
+        for text_index in vec![0, 1] {
+            for line in 0..7 {
+                let first_match_A = Match {
+                    text_index,
+                    index_in_str: 0 + 21*line,
+                    start_line: line,
+                    end_line: line,
+                    length: 6,
+                    errors: 0,
+                };
+                let second_match_A = Match {
+                    index_in_str: 10 + 21*line,
+                    ..first_match_A
+                };
+
+                let first_match_E = Match {
+                    index_in_str: 4 + 21*line,
+                    ..first_match_A
+                };
+                let second_match_E = Match {
+                    index_in_str: 14 + 21*line,
+                    ..first_match_A
+                };
+                expected_A.push(first_match_A);
+                expected_A.push(second_match_A);
+                expected_E.push(first_match_E);
+                expected_E.push(second_match_E);
+            }
+        }
+        compare_matches(expected_A, matches_A);
+        compare_matches(expected_E, matches_E);
+
+        for text_index in vec![0, 1] {
+            for line in vec![0, 1, 2, 4, 5] {
+                let match_H = Match {
+                    text_index,
+                    index_in_str: 17 + 21*line,
+                    start_line: line,
+                    end_line: line + 1,
+                    length: 5,
+                    errors: 0,
+                };
+                expected_H.push(match_H);
+            }
+        }
+        compare_matches(expected_H, matches_H);
+    }
+
+    #[test]
     fn construct_trie_from_file() {
         init();
-        let trie = SuffixTrie::from_file("resources/tests/small.txt");
+        let trie = SuffixTrie::from_file("resources/tests/simple/drunken.txt");
         println!("Result is {:#?}", trie);
         debug!("Test");
         match trie {
@@ -472,15 +538,24 @@ impl SuffixTrie {
         let mut suffix_trie = SuffixTrie::empty();
 
         let files = fs::read_dir(path)?;
+        let mut paths: Vec<String> = vec![];
+
         for file in files {
             info!("Attempting to read file {:?}", file);
             let file = file?;
-            match file.path().to_str() {
-                Some(path) => suffix_trie.add_file(path)?,
+            let path = file.path();
+            match path.to_str() {
+                Some(path_str) => paths.push(path_str.to_string()),
                 None => return Err(Error::new(ErrorKind::InvalidInput,
                                               "Failed to convert path to string")),
             }
         }
+        paths.sort();
+
+        for path in paths {
+            suffix_trie.add_file(&path)?
+        }
+
         Ok(suffix_trie)
     }
 
