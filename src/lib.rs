@@ -56,12 +56,12 @@ mod tests {
         assert_eq!(trie.len(), 6);
 
         let mut trie = SuffixTrie::empty();
-        trie.add_sentences_from_text("test", "ABCDE.ABCDE.ABCDE.");
+        trie.add_sentences_from_text("test", "ABCDE.<<STOP>>ABCDE.<<STOP>>ABCDE.");
         println!("Result is {:#?}", trie);
-        assert_eq!(trie.len(), 1 + 5 + 4 + 3 + 2 + 1);
-        trie.add_sentences_from_text("duplicate", "ABCDE.ABCDE.ABCDE.");
+        assert_eq!(trie.len(), 1 + 6 + 5 + 4 + 3 + 2 + 1);
+        trie.add_sentences_from_text("duplicate", "ABCDE.<<STOP>>ABCDE.<<STOP>>ABCDE.");
         println!("Result is {:#?}", trie);
-        assert_eq!(trie.len(), 1 + 5 + 4 + 3 + 2 + 1);
+        assert_eq!(trie.len(), 1 + 6 + 5 + 4 + 3 + 2 + 1);
     }
 
     #[test]
