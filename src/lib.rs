@@ -168,21 +168,6 @@ mod tests {
         compare_match_indices(matches, vec![3, 11, 19]);
     }
 
-    fn find_single_wildcard() {
-        init();
-        let trie = SuffixTrie::new("oh this and that");
-        println!("Result is {:#?}", trie);
-        let matches = trie.find_edit_distance_ignore("th??", 0, HashMap::new());
-        compare_match_indices(matches, vec![3, 12]);
-    }
-
-    #[test]
-    fn find_matches_sentences() {
-        init();
-        let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
-        println!("{:?}", trie.find_exact("Some"));
-    }
-
     #[test]
     fn line_number_calculation() {
         init();
@@ -216,10 +201,16 @@ mod tests {
         //# Try building up trie from individual files and check we get the same
         let mut matches_A = trie.find_exact("ABCDEF");
         let mut matches_E = trie.find_exact("EFGHIJ");
+        let mut matches_E_error = trie.find_edit_distance("EFxHIJ", 1);
+        let mut matches_E_del = trie.find_edit_distance("EFHIJ", 1);
+        let mut matches_E_ins = trie.find_edit_distance("EFGxHIJ", 1);
         let mut matches_H = trie.find_exact("HIJ\nA");
 
         let mut expected_A: Vec<Match> = vec![];
         let mut expected_E: Vec<Match> = vec![];
+        let mut expected_E_error: Vec<Match> = vec![];
+        let mut expected_E_del: Vec<Match> = vec![];
+        let mut expected_E_ins: Vec<Match> = vec![];
         let mut expected_H: Vec<Match> = vec![];
         for text_index in vec![0, 1] {
             for line in 0..7 {
@@ -244,14 +235,31 @@ mod tests {
                     index_in_str: 14 + 21*line,
                     ..first_match_A
                 };
+                let first_match_E_error = Match {
+                    errors: 1,
+                    ..first_match_E
+                };
+                let second_match_E_error = Match {
+                    errors: 1,
+                    ..second_match_E
+                };
                 expected_A.push(first_match_A);
                 expected_A.push(second_match_A);
                 expected_E.push(first_match_E);
                 expected_E.push(second_match_E);
+                expected_E_error.push(first_match_E_error.clone());
+                expected_E_error.push(second_match_E_error.clone());
+                expected_E_del.push(first_match_E_error.clone());
+                expected_E_del.push(second_match_E_error.clone());
+                expected_E_ins.push(first_match_E_error.clone());
+                expected_E_ins.push(second_match_E_error.clone());
             }
         }
         compare_matches(expected_A, matches_A);
         compare_matches(expected_E, matches_E);
+        compare_matches(expected_E_error, matches_E_error);
+        compare_matches(expected_E_del, matches_E_del);
+        compare_matches(expected_E_ins, matches_E_ins);
 
         for text_index in vec![0, 1] {
             for line in vec![0, 1, 2, 4, 5] {
