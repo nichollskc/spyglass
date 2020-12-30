@@ -801,6 +801,14 @@ impl SuffixTrie {
         assert!(! parent.children.contains_key(&edge));
         parent.children.insert(edge, child_index);
     }
+
+    pub fn get_text_names(&self) -> Vec<String> {
+        let mut text_names: Vec<String> = vec![];
+        for text in self.texts.iter() {
+            text_names.push(text.name.to_string());
+        }
+        text_names
+    }
 }
 
 impl SubTrie {
