@@ -205,6 +205,11 @@ mod tests {
         let mut matches_E_del = trie.find_edit_distance("EFHIJ", 1);
         let mut matches_E_ins = trie.find_edit_distance("EFGxHIJ", 1);
         let mut matches_H = trie.find_exact("HIJ\nA");
+        let first = matches_A.pop().unwrap();
+        let second = matches_A.pop().unwrap();
+        println!("{:#?}", first);
+        println!("{:#?}", trie.get_strings_of_match(&first, 2));
+        println!("{:#?}", trie.get_strings_of_match(&second, 2));
 
         let mut expected_A: Vec<Match> = vec![];
         let mut expected_E: Vec<Match> = vec![];
@@ -216,23 +221,23 @@ mod tests {
             for line in 0..7 {
                 let first_match_A = Match {
                     text_index,
-                    index_in_str: 0 + 21*line,
+                    index_in_str: 0 + 22*line,
                     start_line: line,
                     end_line: line,
                     length: 6,
                     errors: 0,
                 };
                 let second_match_A = Match {
-                    index_in_str: 10 + 21*line,
+                    index_in_str: 11 + 22*line,
                     ..first_match_A
                 };
 
                 let first_match_E = Match {
-                    index_in_str: 4 + 21*line,
+                    index_in_str: 4 + 22*line,
                     ..first_match_A
                 };
                 let second_match_E = Match {
-                    index_in_str: 14 + 21*line,
+                    index_in_str: 15 + 22*line,
                     ..first_match_A
                 };
                 let first_match_E_error = Match {
@@ -265,7 +270,7 @@ mod tests {
             for line in vec![0, 1, 2, 4, 5] {
                 let match_H = Match {
                     text_index,
-                    index_in_str: 17 + 21*line,
+                    index_in_str: 18 + 22*line,
                     start_line: line,
                     end_line: line + 1,
                     length: 5,
