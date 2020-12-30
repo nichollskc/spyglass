@@ -278,6 +278,23 @@ mod tests {
     }
 
     #[test]
+    fn match_str_is_match() {
+        init();
+        let trie = SuffixTrie::from_directory("./resources/tests/large_100/").unwrap();
+        println!("Made trie!");
+        let matches = trie.find_exact("ell");
+        for match_obj in matches {
+            for context in vec![0, 1, 5, 10] {
+                let (before, matching, after) = trie.get_strings_of_match(&match_obj,
+                                                                          context);
+                assert_eq!("ell", matching);
+                //assert_eq!(before.match_indices('\n').count(), context);
+                //assert_eq!(after.match_indices('\n').count(), context);
+            }
+        }
+    }
+
+    #[test]
     fn construct_trie_from_file() {
         init();
         let trie = SuffixTrie::from_file("resources/tests/simple/drunken.txt");
@@ -535,8 +552,8 @@ impl SuffixTrie {
 
         let mut sentence_start = 0;
         for sentence in sentences {
-            self.add_string_suffixes(sentence, sentence_start, text_index);
-            sentence_start += sentence.len();
+            let num_chars = self.add_string_suffixes(sentence, sentence_start, text_index);
+            sentence_start += num_chars;
         }
     }
 
@@ -571,10 +588,12 @@ impl SuffixTrie {
     fn add_string_suffixes(&mut self,
                            string: &str,
                            start_index: usize,
-                           text_index: usize) {
+                           text_index: usize) -> usize{
+        let mut num_chars = 0;
         self.str_storage.push_str(string.clone());
 
         for (index, c) in string.char_indices() {
+            num_chars += 1;
             if c == '\n' {
                 self.texts[text_index].line_start_indices.push(index + start_index);
                 debug!("Adding line to line_start_indices {:?}", self.texts[text_index].line_start_indices);
@@ -585,6 +604,7 @@ impl SuffixTrie {
             self.add_suffix(suffix, total_index, text_index);
         }
         self.texts[text_index].last_index += string.len();
+        num_chars
     }
 
     fn add_suffix(&mut self, string: &str,
@@ -754,18 +774,20 @@ impl SuffixTrie {
         (self.str_storage[start .. end]).to_string()
     }
 
-    pub fn get_strings_of_match(&self, match_obj: &Match) -> (String, String, String) {
+    pub fn get_strings_of_match(&self,
+                                match_obj: &Match,
+                                context_lines: usize) -> (String, String, String) {
         let text = &self.texts[match_obj.text_index];
         let matching = self.owned_from_index(text,
                                              match_obj.index_in_str,
                                              match_obj.length);
         let before = self.owned_lines_before(text,
                                              match_obj.start_line,
-                                             2,
+                                             context_lines,
                                              match_obj.index_in_str);
         let after = self.owned_lines_after(text,
                                            match_obj.end_line,
-                                           2,
+                                           context_lines,
                                            match_obj.index_in_str + match_obj.length);
         (before, matching, after)
     }
