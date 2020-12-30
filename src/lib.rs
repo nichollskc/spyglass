@@ -454,7 +454,7 @@ impl SuffixTrie {
 
 
     pub fn add_sentences_from_text(&mut self, text_name: &str, contents: &str) {
-        let sentences: Vec<&str> = contents.split(".").collect();
+        let sentences: Vec<&str> = contents.split("<<STOP>>").collect();
 
         self.texts.push(Text::new(text_name));
         let text_index = self.texts.len() - 1;
