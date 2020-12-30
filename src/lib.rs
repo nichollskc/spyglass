@@ -180,27 +180,27 @@ mod tests {
     #[test]
     fn line_number_calculation() {
         init();
-        let trie = SuffixTrie {
+        let text = Text {
             line_start_indices: vec![0, 10, 20, 30, 40, 50, 60, 70],
-            ..SuffixTrie::empty()
+            ..Text::new("noname")
         };
         for index in 0..9 {
             for line in 0..7 {
-                assert_eq!(trie.get_line_of_character(index + line*10), line);
+                assert_eq!(text.get_line_of_character(index + line*10), line);
             }
             for line in 8..10 {
-                assert_eq!(trie.get_line_of_character(index + line*10), 7);
+                assert_eq!(text.get_line_of_character(index + line*10), 7);
             }
         }
-        assert_eq!(trie.get_line_of_character(0), 0);
-        assert_eq!(trie.get_line_of_character(1), 0);
-        assert_eq!(trie.get_line_of_character(2), 0);
-        assert_eq!(trie.get_line_of_character(9), 0);
-        assert_eq!(trie.get_line_of_character(10), 1);
-        assert_eq!(trie.get_line_of_character(29), 2);
-        assert_eq!(trie.get_line_of_character(30), 3);
-        assert_eq!(trie.get_line_of_character(31), 3);
-        assert_eq!(trie.get_line_of_character(139), 7);
+        assert_eq!(text.get_line_of_character(0), 0);
+        assert_eq!(text.get_line_of_character(1), 0);
+        assert_eq!(text.get_line_of_character(2), 0);
+        assert_eq!(text.get_line_of_character(9), 0);
+        assert_eq!(text.get_line_of_character(10), 1);
+        assert_eq!(text.get_line_of_character(29), 2);
+        assert_eq!(text.get_line_of_character(30), 3);
+        assert_eq!(text.get_line_of_character(31), 3);
+        assert_eq!(text.get_line_of_character(139), 7);
     }
 
     #[test]
@@ -236,7 +236,6 @@ pub struct Match {
     pub end_line: usize,
     pub length: usize,
     pub errors: usize,
-    pub matching_lines: String,
 }
 
 impl Ord for Match {
@@ -301,13 +300,82 @@ impl Leaf {
 #[derive(Debug,Serialize,Deserialize)]
 struct Text {
     name: String,
+    // Indices of the starts of lines
+    line_start_indices: Vec<usize>,
+    last_index: usize,
 }
 
 impl Text {
     fn new(name: &str) -> Self {
         Text {
             name: name.to_string(),
+            line_start_indices: vec![0],
+            last_index: 0,
         }
+    }
+
+    fn char_before_line(&self, char_index: usize, line_index: usize) -> bool {
+        let mut is_before_line;
+        if line_index == self.line_start_indices.len() {
+            // This is an invalid line index (too high) so the character
+            // must come on a line before this one
+            is_before_line = true;
+        } else if char_index < self.line_start_indices[line_index] {
+            // The character index is before the index of the start of this
+            // line, so the character comes before the line
+            is_before_line = true;
+        } else {
+            // Character index after the index of start of line, so character
+            // is on this line or afterwards
+            is_before_line = false;
+        }
+        is_before_line
+    }
+
+    fn get_line_of_character(&self, char_index: usize) -> usize {
+        // Find the last line_index smaller than char_index
+        let mut found = false;
+        let last_line = self.line_start_indices.len();
+        let mut lower_line_limit = 0;
+        let mut upper_line_limit = match last_line {
+            0 => 0,
+            ll => ll - 1,
+        };
+        debug!("Finding index of line containing char index {}", char_index);
+        debug!("Line start indices are {:?}", self.line_start_indices);
+        let mut current_line: usize = (upper_line_limit - lower_line_limit)/2;
+        while !found && lower_line_limit != upper_line_limit {
+            debug!("Upper: {}, Lower: {}, Current: {}", upper_line_limit, lower_line_limit, current_line);
+            assert!(lower_line_limit <= current_line);
+            assert!(upper_line_limit >= current_line);
+            if self.char_before_line(char_index, current_line) {
+                // The character must be on an earlier line
+                upper_line_limit = cmp::max(current_line - 1, 0);
+            } else {
+                // The character is on this line or later
+                if self.char_before_line(char_index, current_line + 1) {
+                    // It must be on the current line, since it can't be later
+                    // (it's before the next line)
+                    found = true;
+                    debug!("Found matching line: {}", current_line);
+                } else {
+                    // The character is on a later line
+                    lower_line_limit = cmp::min(current_line + 1, last_line);
+                }
+
+            }
+            current_line = lower_line_limit + (upper_line_limit - lower_line_limit)/2;
+        }
+        current_line
+    }
+
+    /// Find the index of the line where this substring starts and the index
+    /// of the line where it ends
+    fn get_lines_of_substring(&self, start_index: usize, length: usize) -> (usize, usize) {
+        let start_line = self.get_line_of_character(start_index);
+        let end_line = self.get_line_of_character(start_index + length);
+
+        (start_line, end_line)
     }
 }
 
@@ -327,8 +395,6 @@ pub struct SuffixTrie {
     // Information about each of the texts (e.g. files) included in
     // the Suffix Trie
     texts: Vec<Text>,
-    // Indices of the starts of lines
-    line_start_indices: Vec<usize>,
 }
 
 #[derive(Debug,Serialize,Deserialize)]
@@ -368,7 +434,6 @@ impl SuffixTrie {
             str_storage: String::from(""),
             node_storage: vec![root_node],
             texts: vec![],
-            line_start_indices: vec![0],
         };
         suffix_trie
     }
@@ -398,6 +463,7 @@ impl SuffixTrie {
         for sentence in sentences {
             self.add_string_suffixes(sentence, sentence_start, text_index);
             sentence_start += sentence.len();
+            self.texts[text_index].last_index = sentence_start;
         }
     }
 
@@ -428,8 +494,8 @@ impl SuffixTrie {
 
         for (index, c) in string.char_indices() {
             if c == '\n' {
-                self.line_start_indices.push(index + start_index);
-                debug!("Adding line to line_start_indices {:?}", self.line_start_indices);
+                self.texts[text_index].line_start_indices.push(index + start_index);
+                debug!("Adding line to line_start_indices {:?}", self.texts[text_index].line_start_indices);
             }
 
             let suffix = &string[index..];
@@ -547,7 +613,8 @@ impl SuffixTrie {
         let mut matches = vec![];
 
         for leaf in leaves.iter() {
-            let (start_line, end_line) = self.get_lines_of_substring(leaf.index_in_str,
+            let text = &self.texts[leaf.text_index];
+            let (start_line, end_line) = text.get_lines_of_substring(leaf.index_in_str,
                                                                      length);
             let match_obj = Match {
                 text_index: leaf.text_index,
@@ -556,7 +623,6 @@ impl SuffixTrie {
                 end_line,
                 length,
                 errors,
-                matching_lines: (self.str_storage[leaf.index_in_str .. leaf.index_in_str + length]).to_string(),
             };
             matches.push(match_obj);
         }
@@ -564,68 +630,57 @@ impl SuffixTrie {
         matches
     }
 
-    fn char_before_line(&self, char_index: usize, line_index: usize) -> bool {
-        let mut is_before_line;
-        if line_index == self.line_start_indices.len() {
-            // This is an invalid line index (too high) so the character
-            // must come on a line before this one
-            is_before_line = true;
-        } else if char_index < self.line_start_indices[line_index] {
-            // The character index is before the index of the start of this
-            // line, so the character comes before the line
-            is_before_line = true;
+    fn owned_lines_after(&self,
+                         text: &Text,
+                         line_index: usize,
+                         lines_after: usize,
+                         start_char_index: usize) -> String {
+        let end_line = line_index + lines_after;
+        let end_char_index = if end_line >= text.line_start_indices.len() - 2 {
+            // This is either beyond the end of the text, or is the very last
+            // line. We must return the end of the text
+            text.last_index
         } else {
-            // Character index after the index of start of line, so character
-            // is on this line or afterwards
-            is_before_line = false;
-        }
-        is_before_line
-    }
-
-    fn get_line_of_character(&self, char_index: usize) -> usize {
-        // Find the last line_index smaller than char_index
-        let mut found = false;
-        let last_line = self.line_start_indices.len();
-        let mut lower_line_limit = 0;
-        let mut upper_line_limit = match last_line {
-            0 => 0,
-            ll => ll - 1,
+            text.line_start_indices[end_line + 1]
         };
-        debug!("Finding index of line containing char index {}", char_index);
-        debug!("Line start indices are {:?}", self.line_start_indices);
-        let mut current_line: usize = (upper_line_limit - lower_line_limit)/2;
-        while !found && lower_line_limit != upper_line_limit {
-            debug!("Upper: {}, Lower: {}, Current: {}", upper_line_limit, lower_line_limit, current_line);
-            assert!(lower_line_limit <= current_line);
-            assert!(upper_line_limit >= current_line);
-            if self.char_before_line(char_index, current_line) {
-                // The character must be on an earlier line
-                upper_line_limit = cmp::max(current_line - 1, 0);
-            } else {
-                // The character is on this line or later
-                if self.char_before_line(char_index, current_line + 1) {
-                    // It must be on the current line, since it can't be later
-                    // (it's before the next line)
-                    found = true;
-                    debug!("Found matching line: {}", current_line);
-                } else {
-                    // The character is on a later line
-                    lower_line_limit = cmp::min(current_line + 1, last_line);
-                }
-
-            }
-            current_line = lower_line_limit + (upper_line_limit - lower_line_limit)/2;
-        }
-        current_line
+        let length = end_char_index - start_char_index;
+        self.owned_from_index(text, start_char_index, length)
     }
 
-    /// Find the index of the line where this substring starts and the index
-    /// of the line where it ends
-    fn get_lines_of_substring(&self, start_index: usize, length: usize) -> (usize, usize) {
-        let start_line = self.get_line_of_character(start_index);
-        let end_line = self.get_line_of_character(start_index + length);
+    fn owned_lines_before(&self,
+                          text: &Text,
+                          line_index: usize,
+                          lines_before: usize,
+                          end_char_index: usize) -> String {
+        let start_line = cmp::max(0, line_index - lines_before);
+        let start_char_index = text.line_start_indices[start_line];
+        let length = end_char_index - start_char_index;
+        self.owned_from_index(text, start_char_index, length)
+    }
 
-        (start_line, end_line)
+    fn owned_from_index(&self,
+                        text: &Text,
+                        index_in_str: usize,
+                        length: usize) -> String {
+        let start = index_in_str;
+        let end = start + length;
+        (self.str_storage[start .. end]).to_string()
+    }
+
+    pub fn get_strings_of_match(&self, match_obj: &Match) -> (String, String, String) {
+        let text = &self.texts[match_obj.text_index];
+        let matching = self.owned_from_index(text,
+                                             match_obj.index_in_str,
+                                             match_obj.length);
+        let before = self.owned_lines_before(text,
+                                             match_obj.start_line,
+                                             5,
+                                             match_obj.index_in_str);
+        let after = self.owned_lines_after(text,
+                                           match_obj.end_line,
+                                           5,
+                                           match_obj.index_in_str);
+        (before, matching, after)
     }
 
     fn _unsafe_add_child_to_parent(&mut self,
