@@ -595,7 +595,7 @@ impl SuffixTrie {
         for (index, c) in string.char_indices() {
             num_chars += 1;
             if c == '\n' {
-                self.texts[text_index].line_start_indices.push(index + start_index);
+                self.texts[text_index].line_start_indices.push(index + start_index + 1);
                 debug!("Adding line to line_start_indices {:?}", self.texts[text_index].line_start_indices);
             }
 
