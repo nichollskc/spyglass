@@ -487,7 +487,7 @@ struct WorkingMatch {
 #[derive(Debug,Serialize,Deserialize)]
 pub struct SuffixTrie {
     // Place to store entire string - keeps ownership simple
-    str_storage: String,
+    str_storage: Vec<char>,
     // Place to store all the nodes
     node_storage: Vec<SubTrie>,
     // Information about each of the texts (e.g. files) included in
@@ -529,7 +529,7 @@ impl SuffixTrie {
     pub fn empty() -> Self {
         let root_node = SubTrie::empty(0);
         let mut suffix_trie = SuffixTrie {
-            str_storage: String::from(""),
+            str_storage: vec![],
             node_storage: vec![root_node],
             texts: vec![],
         };
@@ -598,9 +598,9 @@ impl SuffixTrie {
                            start_index: usize,
                            text_index: usize) -> usize{
         let mut num_chars = 0;
-        self.str_storage.push_str(string.clone());
 
         for (index, c) in string.char_indices() {
+            self.str_storage.push(c);
             num_chars += 1;
             if c == '\n' {
                 self.texts[text_index].line_start_indices.push(index + start_index + 1);
@@ -780,7 +780,7 @@ impl SuffixTrie {
                         length: usize) -> String {
         let start = index_in_str + text.offset;
         let end = start + length;
-        (self.str_storage[start .. end]).to_string()
+        (self.str_storage[start .. end]).iter().cloned().collect::<String>()
     }
 
     pub fn get_strings_of_match(&self,
