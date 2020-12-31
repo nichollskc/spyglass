@@ -173,7 +173,7 @@ mod tests {
         init();
         let text = Text {
             line_start_indices: vec![0, 10, 20, 30, 40, 50, 60, 70],
-            ..Text::new("noname")
+            ..Text::new("noname", 0)
         };
         for index in 0..9 {
             for line in 0..7 {
@@ -399,14 +399,16 @@ struct Text {
     // Indices of the starts of lines
     line_start_indices: Vec<usize>,
     last_index: usize,
+    offset: usize,
 }
 
 impl Text {
-    fn new(name: &str) -> Self {
+    fn new(name: &str, offset: usize) -> Self {
         Text {
             name: name.to_string(),
             line_start_indices: vec![0],
             last_index: 0,
+            offset,
         }
     }
 
@@ -518,7 +520,7 @@ impl SuffixTrie {
     /// New suffix trie containing suffixes of a single string
     pub fn new(string: &str) -> Self {
         let mut suffix_trie = SuffixTrie::empty();
-        suffix_trie.texts.push(Text::new("first text"));
+        suffix_trie.texts.push(Text::new("first text", 0));
         suffix_trie.add_string_suffixes(string, 0, 0);
         suffix_trie
     }
@@ -552,7 +554,8 @@ impl SuffixTrie {
     pub fn add_sentences_from_text(&mut self, text_name: &str, contents: &str) {
         let sentences: Vec<&str> = contents.split("<<STOP>>").collect();
 
-        self.texts.push(Text::new(text_name));
+        let offset = self.str_storage.len();
+        self.texts.push(Text::new(text_name, offset));
         let text_index = self.texts.len() - 1;
 
         let mut sentence_start = 0;
@@ -608,11 +611,12 @@ impl SuffixTrie {
             let total_index = start_index + index;
             self.add_suffix(suffix, total_index, text_index);
         }
-        self.texts[text_index].last_index += string.len();
+        self.texts[text_index].last_index += num_chars;
         num_chars
     }
 
-    fn add_suffix(&mut self, string: &str,
+    fn add_suffix(&mut self,
+                  string: &str,
                   index_in_text: usize,
                   text_index: usize) {
         let mut parent_index = 0;
@@ -774,8 +778,8 @@ impl SuffixTrie {
                         text: &Text,
                         index_in_str: usize,
                         length: usize) -> String {
-        let start = index_in_str;
-        let end = start + length;
+        let start = index_in_str + text.offset;
+        let end = start + length + text.offset;
         (self.str_storage[start .. end]).to_string()
     }
 
