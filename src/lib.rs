@@ -7,6 +7,7 @@ use std::path::Path;
 use std::collections::{HashMap,HashSet};
 
 use bincode;
+use deunicode;
 use log::{info,warn,debug,error};
 use serde::{Serialize,Deserialize};
 
@@ -311,6 +312,45 @@ mod tests {
         }
     }
 
+    #[test]
+    fn dodgy_characters() {
+        init();
+        //                          012345678901234567890123456789012345678901
+        let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
+        let alf_matches = trie.find_exact("xxÆlf");
+        let alf_matches_edit_0 = trie.find_edit_distance("xxÆlf", 0);
+        //let alf_matches_edit_1 = trie.find_edit_distance("xxÆlf", 1);
+        let alf_match = Match {
+            text_index: 0,
+            index_in_str: 9,
+            length: 6,
+            start_line: 0,
+            end_line: 0,
+            errors: 0,
+        };
+        let alf_match2 = Match {
+            index_in_str: 18,
+            ..alf_match
+        };
+        let alf_match3 = Match {
+            index_in_str: 27,
+            errors: 1,
+            length: 5,
+            ..alf_match
+        };
+        let alf_match4 = Match {
+            index_in_str: 35,
+            ..alf_match
+        };
+        let alf_expected = vec![alf_match.clone(),
+                                alf_match2.clone(),
+                                alf_match4.clone()];
+        let alf_expected_edit_1 = vec![alf_match, alf_match2, alf_match3, alf_match4];
+        compare_matches(alf_expected.clone(), alf_matches);
+        compare_matches(alf_expected, alf_matches_edit_0);
+        //compare_matches(alf_expected_edit_1, alf_matches_edit_1);
+    }
+
     fn bench_real_canon() {
         init();
         let trie = SuffixTrie::from_directory("resources/tests/large_1000/");
@@ -598,8 +638,9 @@ impl SuffixTrie {
                            start_index: usize,
                            text_index: usize) -> usize{
         let mut num_chars = 0;
+        let ascii_string = deunicode::deunicode(string);
 
-        for (index, c) in string.char_indices() {
+        for (index, c) in ascii_string.char_indices() {
             self.str_storage.push(c);
             num_chars += 1;
             if c == '\n' {
@@ -607,7 +648,7 @@ impl SuffixTrie {
                 debug!("Adding line to line_start_indices {:?}", self.texts[text_index].line_start_indices);
             }
 
-            let suffix = &string[index..];
+            let suffix = &ascii_string[index..];
             let total_index = start_index + index;
             self.add_suffix(suffix, total_index, text_index);
         }
@@ -686,7 +727,8 @@ impl SuffixTrie {
     /// Find all exact matches of the given pattern
     pub fn find_exact(&self, pattern: &str) -> Vec<Match> {
         let mut parent: &SubTrie = self.get_node(0);
-        for c in pattern.chars() {
+        let ascii_pattern = deunicode::deunicode(pattern);
+        for c in ascii_pattern.chars() {
             let child = parent.get_child_index(c);
             match child {
                 Some(child_index) => {
@@ -696,7 +738,7 @@ impl SuffixTrie {
             }
         }
         let leaves = self.get_all_leaf_descendants(parent.node_index);
-        let mut matches = self.match_array_from_leaves(leaves, pattern.len(), 0);
+        let mut matches = self.match_array_from_leaves(leaves, ascii_pattern.len(), 0);
         matches.sort();
         matches
     }
@@ -978,9 +1020,10 @@ impl SuffixTrieEditMatcher {
                                  suffix_trie: &SuffixTrie,
                                  pattern: &str)
         -> Vec<Match> {
+        let ascii_pattern = deunicode::deunicode(pattern);
 
         // Keep track of matches and how many errors they have so far
-        for c in pattern.chars() {
+        for c in ascii_pattern.chars() {
             debug!("Matching char: {}", c);
             debug!("Matching nodes: {:#?}", self);
             while let Some(parent_match) = self.matches_this_gen.next() {
