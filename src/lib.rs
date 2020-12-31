@@ -217,7 +217,7 @@ mod tests {
         let mut expected_E_del: Vec<Match> = vec![];
         let mut expected_E_ins: Vec<Match> = vec![];
         let mut expected_H: Vec<Match> = vec![];
-        for text_index in vec![0, 1] {
+        for text_index in vec![0, 1, 2] {
             for line in 0..7 {
                 let first_match_A = Match {
                     text_index,
@@ -266,7 +266,7 @@ mod tests {
         compare_matches(expected_E_del, matches_E_del);
         compare_matches(expected_E_ins, matches_E_ins);
 
-        for text_index in vec![0, 1] {
+        for text_index in vec![0, 1, 2] {
             for line in vec![0, 1, 2, 4, 5] {
                 let match_H = Match {
                     text_index,
@@ -779,7 +779,7 @@ impl SuffixTrie {
                         index_in_str: usize,
                         length: usize) -> String {
         let start = index_in_str + text.offset;
-        let end = start + length + text.offset;
+        let end = start + length;
         (self.str_storage[start .. end]).to_string()
     }
 
