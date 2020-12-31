@@ -646,7 +646,6 @@ impl SuffixTrie {
         let ascii_string = deunicode::deunicode(string);
 
         for (index, c) in ascii_string.char_indices() {
-            self.str_storage.push(c);
             num_chars += 1;
             if c == '\n' {
                 self.texts[text_index].line_start_indices.push(index + start_index + 1);
@@ -669,9 +668,13 @@ impl SuffixTrie {
         let mut child_index = 0;
         let mut string_iterator = string.chars();
         let mut current_char_index = index_in_text + self.texts[text_index].offset;
+        debug!("Adding string {} to tree {:#?}", string, self);
         while let Some(c) = &string_iterator.next() {
+            self.str_storage.push(*c);
+
             // Check if there is an edge starting with this char in the parent
             let parent: &SubTrie = self.get_node(parent_index);
+            debug!("Looking to add character {} to trie. Parent is {:#?}", *c, parent);
             if let Some(ancestor_index) = parent.get_child_index(*c) {
                 // There is an existing node starting with this character
                 child_index = self.insert_within_edge(*ancestor_index,
@@ -757,6 +760,8 @@ impl SuffixTrie {
             // Get next character of our string and compare to next
             // character of existing edge
             if let Some(c) = string_iterator.next() {
+                self.str_storage.push(c);
+
                 let index = ancestor_start + shared_length;
                 let ancestor_c = self.str_storage[index];
 
