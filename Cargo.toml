@@ -12,3 +12,13 @@ deunicode = "1.1.1"
 env_logger = "0.8.2"
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "suffixtrie_benchmark"
+harness = false
+
+[profile.release]
+debug = true
