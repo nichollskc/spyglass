@@ -5,6 +5,7 @@ use std::io;
 use std::io::{Error,ErrorKind};
 use std::path::Path;
 use std::collections::{HashMap,HashSet};
+use std::str::Chars;
 
 use bincode;
 use deunicode;
@@ -539,11 +540,15 @@ pub struct SuffixTrie {
 struct SubTrie {
     // Index of this node in the overall array
     node_index: usize,
-    // List of children node indices, indexed by the character labelling the edge
-    // from the parent to the child
+    // List of children node indices, indexed by the string labelling the edge
+    // from the parent to the child. The key is the first character of the edge.
     children: HashMap<char, usize>,
     // List of indices at which this suffix is present
     leaf_children: Vec<Leaf>,
+    // Index where the string labelling the edge from this node's parent starts
+    // and the length of this edge.
+    edge_start_index: usize,
+    edge_length: usize,
 }
 
 impl WorkingMatch {
@@ -567,7 +572,7 @@ impl SuffixTrie {
 
     /// New empty suffix trie
     pub fn empty() -> Self {
-        let root_node = SubTrie::empty(0);
+        let root_node = SubTrie::empty(0, 0, 0);
         let mut suffix_trie = SuffixTrie {
             str_storage: vec![],
             node_storage: vec![root_node],
@@ -661,38 +666,125 @@ impl SuffixTrie {
                   index_in_text: usize,
                   text_index: usize) {
         let mut parent_index = 0;
-
-        for c in string.chars() {
-            let child_index = self.add_edge(c, parent_index);
+        let mut child_index = 0;
+        let mut string_iterator = string.chars();
+        let mut current_char_index = index_in_text + self.texts[text_index].offset;
+        while let Some(c) = &string_iterator.next() {
+            // Check if there is an edge starting with this char in the parent
+            let parent: &SubTrie = self.get_node(parent_index);
+            if let Some(ancestor_index) = parent.get_child_index(*c) {
+                // There is an existing node starting with this character
+                child_index = self.insert_within_edge(*ancestor_index,
+                                                      &mut string_iterator,
+                                                      current_char_index);
+            } else {
+                // There is no edge, simply add a edge from this parent
+                // labelled with the rest of the string
+                child_index = self.add_node(parent_index,
+                                            *c,
+                                            current_char_index,
+                                            &string_iterator.count() + 1);
+                break;
+            }
             parent_index = child_index;
+            current_char_index += 1;
         }
 
         let parent: &mut SubTrie = self.get_node_mut(parent_index);
         parent.add_leaf_child(Leaf::new(index_in_text, text_index));
     }
 
-    fn add_node(&mut self, edge: char, parent_index: usize) -> usize {
+    fn split_edge(&mut self, node_index: usize, new_length: usize) {
+        let mut parent = self.get_node_mut(node_index);
+        let new_edge_start_index = parent.edge_start_index + new_length;
+        let new_edge_length = parent.edge_length - new_length;
+        // We are splitting the edge into two new edges, so the new
+        // length must be shorter
+        assert!(parent.edge_length > new_length);
+
+        parent.edge_length = new_length;
+
+        let edge = self.str_storage[new_edge_start_index].clone();
+        self.add_node(node_index,
+                      edge,
+                      new_edge_start_index,
+                      new_edge_length);
+    }
+
+
+    fn add_node(&mut self,
+                parent_index: usize,
+                edge: char,
+                char_index: usize,
+                edge_length: usize) -> usize {
+        let parent = self.get_node(parent_index);
         let child_index = self.node_storage.len();
 
         // Create empty child node
-        self.node_storage.push(SubTrie::empty(child_index));
+        self.node_storage.push(SubTrie::empty(child_index,
+                                              char_index,
+                                              edge_length));
+
+        // Edge should match the value at the given index in the string
+        assert_eq!(edge, self.str_storage[char_index]);
 
         // Add child index to parent's list of children
-        self._unsafe_add_child_to_parent(edge, parent_index, child_index);
+        self._unsafe_add_child_to_parent(edge,
+                                         parent_index,
+                                         child_index);
 
+        // Shouldn't be called if the edge already exists
         // Return index of child node
         child_index
     }
 
-    fn add_edge(&mut self, edge: char, parent_index: usize) -> usize {
-        let parent = self.get_node(parent_index);
-        let maybe_child_index: Option<&usize> = parent.get_child_index(edge);
-        let child_index = match maybe_child_index {
-            Some(index) => *index,
-            None => {
-                self.add_node(edge, parent_index)
+    fn insert_within_edge(&mut self,
+                          parent_index: usize,
+                          string_iterator: &mut Chars,
+                          start_index: usize) -> usize {
+        let ancestor = self.get_node(parent_index);
+        let ancestor_start = ancestor.edge_start_index;
+        let ancestor_length = ancestor.edge_length;
+        let mut child_index = ancestor.node_index;
+
+        // Run through character by character until we find the place
+        // where these strings diverge
+        // Start at the second character of the existing edge, and the next
+        // character of our edge
+        let mut shared_length = 1;
+        let mut edges_agree = true;
+        while shared_length < ancestor_length && edges_agree {
+            // Get next character of our string and compare to next
+            // character of existing edge
+            if let Some(c) = string_iterator.next() {
+                let index = ancestor_start + shared_length;
+                let ancestor_c = self.str_storage[index];
+
+                if c != ancestor_c {
+                    // This is where the edge we want to add diverges
+                    // from the existing edge
+                    self.split_edge(parent_index,
+                                    shared_length);
+                    child_index = self.add_node(parent_index,
+                                                c,
+                                                start_index + shared_length,
+                                                string_iterator.count() + 1);
+                    edges_agree = false
+                }
+            } else {
+                // We have run out of characters from our string
+                // We need to split this edge in two.
+                self.split_edge(parent_index,
+                                shared_length);
+                child_index = parent_index;
+                edges_agree = false;
             }
-        };
+            shared_length += 1;
+        }
+
+        if edges_agree {
+            child_index = parent_index;
+        }
         child_index
     }
 
@@ -847,10 +939,11 @@ impl SuffixTrie {
                                    edge: char,
                                    parent_index: usize,
                                    child_index: usize) {
-        // Shouldn't be called if the edge already exists
         let parent: &mut SubTrie = self.get_node_mut(parent_index);
-        assert!(! parent.children.contains_key(&edge));
         parent.children.insert(edge, child_index);
+
+        // Shouldn't be called if the edge already exists
+        assert!(! parent.children.contains_key(&edge));
     }
 
     pub fn get_text_names(&self) -> Vec<String> {
@@ -863,11 +956,15 @@ impl SuffixTrie {
 }
 
 impl SubTrie {
-    fn empty(node_index: usize) -> Self {
+    fn empty(node_index: usize,
+             edge_start_index: usize,
+             edge_length: usize) -> Self {
         SubTrie {
             children: HashMap::new(),
             node_index,
             leaf_children: vec![],
+            edge_start_index,
+            edge_length,
         }
     }
 
