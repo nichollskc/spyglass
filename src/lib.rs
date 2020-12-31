@@ -940,10 +940,10 @@ impl SuffixTrie {
                                    parent_index: usize,
                                    child_index: usize) {
         let parent: &mut SubTrie = self.get_node_mut(parent_index);
-        parent.children.insert(edge, child_index);
-
         // Shouldn't be called if the edge already exists
         assert!(! parent.children.contains_key(&edge));
+
+        parent.children.insert(edge, child_index);
     }
 
     pub fn get_text_names(&self) -> Vec<String> {
