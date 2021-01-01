@@ -544,14 +544,14 @@ impl SuffixTrie {
     }
 
     pub fn find_edit_distance_ignore(&self,
-                                 pattern: &str,
-                                 max_errors: usize,
-                                 ignored_characters: HashMap<char, bool>)
+                                     pattern: &str,
+                                     max_errors: usize,
+                                     ignored_characters: HashMap<char, bool>)
         -> Vec<Match> {
-        let mut matcher = SuffixTrieEditMatcher::new(max_errors,
-                                                 ignored_characters);
-        matcher.find_edit_distance_ignore(&self, pattern)
-    }
+            let mut matcher = SuffixTrieEditMatcher::new(max_errors,
+                                                         ignored_characters);
+            matcher.find_edit_distance_ignore(&self, pattern)
+        }
 
     /// Find all exact matches of the given pattern
     pub fn find_exact(&self, pattern: &str) -> Vec<Match> {
@@ -854,47 +854,47 @@ impl SuffixTrieEditMatcher {
                                  suffix_trie: &SuffixTrie,
                                  pattern: &str)
         -> Vec<Match> {
-        let ascii_pattern = deunicode::deunicode(pattern);
+            let ascii_pattern = deunicode::deunicode(pattern);
 
-        // Keep track of matches and how many errors they have so far
-        for c in ascii_pattern.chars() {
-            debug!("Matching char: {}", c);
-            debug!("Matching nodes: {:#?}", self);
-            while let Some(parent_match) = self.matches_this_gen.next() {
-                debug!("Parent match: {:?}", parent_match);
-                let parent = suffix_trie.get_node(parent_match.node_index);
-                for (edge, child_index) in parent.children.iter() {
-                    debug!("Considering child {}", edge);
-                    self.add_after_mismatch(parent_match,
-                                            *child_index,
-                                            &c,
-                                            &edge);
-                    self.add_after_pattern_delete(parent_match);
-                    self.add_after_text_delete(parent_match,
-                                               *child_index);
+            // Keep track of matches and how many errors they have so far
+            for c in ascii_pattern.chars() {
+                debug!("Matching char: {}", c);
+                debug!("Matching nodes: {:#?}", self);
+                while let Some(parent_match) = self.matches_this_gen.next() {
+                    debug!("Parent match: {:?}", parent_match);
+                    let parent = suffix_trie.get_node(parent_match.node_index);
+                    for (edge, child_index) in parent.children.iter() {
+                        debug!("Considering child {}", edge);
+                        self.add_after_mismatch(parent_match,
+                                                *child_index,
+                                                &c,
+                                                &edge);
+                        self.add_after_pattern_delete(parent_match);
+                        self.add_after_text_delete(parent_match,
+                                                   *child_index);
+                    }
+                    debug!("Left this gen {:#?}", self.matches_this_gen);
+                    debug!("Left next gen: {:#?}", self.matches_next_gen);
                 }
-                debug!("Left this gen {:#?}", self.matches_this_gen);
-                debug!("Left next gen: {:#?}", self.matches_next_gen);
+                if self.matches_next_gen.is_empty() {
+                    // There are no partial matches
+                    return Vec::new();
+                } else {
+                    self.go_to_next_generation();
+                }
             }
-            if self.matches_next_gen.is_empty() {
-                // There are no partial matches
-                return Vec::new();
-            } else {
-                self.go_to_next_generation();
+            let mut matches = vec![];
+            while let Some(parent_match) = self.matches_this_gen.next() {
+                let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.node_index);
+                debug!("Matching node: {:#?} with children {:#?}",
+                       parent_match.node_index,
+                       leaf_children);
+                let parent_matches = suffix_trie.match_array_from_leaves(leaf_children,
+                                                                         parent_match.length,
+                                                                         parent_match.errors);
+                matches.extend(parent_matches);
             }
+            matches.sort();
+            matches
         }
-        let mut matches = vec![];
-        while let Some(parent_match) = self.matches_this_gen.next() {
-            let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.node_index);
-            debug!("Matching node: {:#?} with children {:#?}",
-                   parent_match.node_index,
-                   leaf_children);
-            let parent_matches = suffix_trie.match_array_from_leaves(leaf_children,
-                                                                     parent_match.length,
-                                                                     parent_match.errors);
-            matches.extend(parent_matches);
-        }
-        matches.sort();
-        matches
-    }
 }
