@@ -59,26 +59,31 @@ mod tests {
     #[test]
     fn test_size() {
         init();
-        let trie = SuffixTrie::new("aba");
-        println!("Result is {:#?}", trie);
-        assert_eq!(trie.len(), 6);
-
         let mut trie = SuffixTrie::empty();
         trie.add_sentences_from_text("test", "ABCDE.<<STOP>>ABCDE.<<STOP>>ABCDE.");
         println!("Result is {:#?}", trie);
-        assert_eq!(trie.len(), 1 + 6 + 5 + 4 + 3 + 2 + 1);
+        assert_eq!(trie.len(), 7);
         trie.add_sentences_from_text("duplicate", "ABCDE.<<STOP>>ABCDE.<<STOP>>ABCDE.");
         println!("Result is {:#?}", trie);
-        assert_eq!(trie.len(), 1 + 6 + 5 + 4 + 3 + 2 + 1);
+        assert_eq!(trie.len(), 7);
+
+        let trie = SuffixTrie::new("abcabdabe");
+        println!("Result is {:#?}", trie);
+        assert_eq!(trie.len(), 1);
     }
 
     #[test]
     fn test_leaves() {
         init();
-        let trie = SuffixTrie::new("aba");
+        helper_test_leaves("abcdefghijk");
+        helper_test_leaves("ababacababccbabcbabccbabcbababcbcbabcbbacbcbabcab");
+    }
+
+    fn helper_test_leaves(string: &str) {
+        let trie = SuffixTrie::new(string);
         println!("Result is {:#?}", trie);
 
-        let expected: HashSet<usize> = (0..3).collect();
+        let expected: HashSet<usize> = (0..string.len()).collect();
         // Gather together all leaf children from the SuffixTrie
         let mut actual: HashSet<usize> = HashSet::new();
         for node in trie.node_storage.iter() {
@@ -304,17 +309,22 @@ mod tests {
     #[test]
     fn construct_trie_from_file() {
         init();
-        let trie = SuffixTrie::from_file("resources/tests/simple/drunken.txt");
+        let trie = SuffixTrie::from_file("resources/tests/simple/drunken.txt").unwrap();
         println!("Result is {:#?}", trie);
-        debug!("Test");
-        match trie {
-            Ok(trie) => println!("{:?}", trie.find_exact("drunken")),
-            Err(e) => println!("{:#?}", e),
-        }
+        trie.find_exact("drunken");
     }
 
     #[test]
-    fn dodgy_characters() {
+    fn build_dodgy_characters() {
+        let trie = SuffixTrie::new("father’s");
+        let trie = SuffixTrie::new("Ælfred");
+        let trie = SuffixTrie::new("…he");
+        let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred…he");
+        let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
+    }
+
+    #[test]
+    fn match_dodgy_characters() {
         init();
         //                          012345678901234567890123456789012345678901
         let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
