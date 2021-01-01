@@ -501,7 +501,7 @@ impl SuffixTrie {
         child_index
     }
 
-    fn consume_all_shared_length(&mut self,
+    fn consume_all_shared_length(&self,
                                  parent_index: usize,
                                  string_iterator: &mut Chars) -> EdgeMatch {
         let ancestor = self.get_node(parent_index);
@@ -544,8 +544,6 @@ impl SuffixTrie {
             index_in_edge += 1;
         }
 
-        debug!("Shared length with ancestor edge was {}", shared_length);
-
         edge_match
     }
 
@@ -555,6 +553,8 @@ impl SuffixTrie {
                           start_index: usize) -> (usize, usize) {
         let edge_match = self.consume_all_shared_length(parent_index,
                                                         string_iterator);
+
+        debug!("Shared length with ancestor edge was {}", edge_match.shared_length);
 
         let child_index = match edge_match.overlap_type {
             EdgeMatchKind::WholeMatch =>  {
@@ -615,17 +615,49 @@ impl SuffixTrie {
         let mut parent: &SubTrie = self.get_node(0);
         let ascii_pattern = deunicode::deunicode(pattern);
         let mut string_iterator = ascii_pattern.chars();
+
+        let mut found_mismatch = false;
         while let Some(c) = &string_iterator.next() {
             if let Some(child_index) = parent.get_child_index(*c) {
-                parent = self.get_node(*child_index);
+                let edge_match = self.consume_all_shared_length(*child_index,
+                                                                &mut string_iterator);
+                match edge_match.overlap_type {
+                    EdgeMatchKind::WholeMatch =>  {
+                        // Continue iterating
+                        parent = self.get_node(*child_index);
+                    },
+                    EdgeMatchKind::Diverge(_) => {
+                        found_mismatch = true;
+                        break;
+                    },
+                    EdgeMatchKind::EarlyStop => {
+                        // Match ended in the middle of the edge (i.e. the rest of our
+                        // string is shorter than the edge, but all characters
+                        // match).
+                        // Set up parent node, but since've we're out of characters
+                        // we shouldn't end up iterating more
+                        parent = self.get_node(*child_index);
+                        assert!(!&string_iterator.next().is_some())
+                    }
+                    EdgeMatchKind::Unknown => panic!("EdgeMatchKind somehow uninitialised!"),
+                }
             } else {
                 // No match
-                return Vec::new()
+                found_mismatch = true;
+                break;
             }
         }
-        let leaves = self.get_all_leaf_descendants(parent.node_index);
-        let mut matches = self.match_array_from_leaves(leaves, ascii_pattern.len(), 0);
-        matches.sort();
+
+        let mut matches = Vec::new();
+        if !found_mismatch {
+            let leaves = self.get_all_leaf_descendants(parent.node_index);
+            info!("Found {} leaves below parent {}",
+                  leaves.len(),
+                  parent.node_index);
+            matches = self.match_array_from_leaves(leaves, ascii_pattern.len(), 0);
+            matches.sort();
+        }
+        info!("Found {} matches", matches.len());
         matches
     }
 
