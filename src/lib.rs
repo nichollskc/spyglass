@@ -245,6 +245,18 @@ impl Text {
     }
 }
 
+enum EdgeMatchKind {
+    Unknown,
+    WholeMatch,
+    EarlyStop,
+    Diverge(char),
+}
+
+struct EdgeMatch {
+    overlap_type: EdgeMatchKind,
+    shared_length: usize,
+}
+
 #[derive(Clone,Copy,Debug)]
 struct WorkingMatch {
     node_index: usize,
@@ -489,23 +501,25 @@ impl SuffixTrie {
         child_index
     }
 
-    fn insert_within_edge(&mut self,
-                          parent_index: usize,
-                          string_iterator: &mut Chars,
-                          start_index: usize) -> (usize, usize) {
+    fn consume_all_shared_length(&mut self,
+                                 parent_index: usize,
+                                 string_iterator: &mut Chars) -> EdgeMatch {
         let ancestor = self.get_node(parent_index);
         let ancestor_start = ancestor.edge_start_index;
         let ancestor_length = ancestor.edge_length;
-        let mut child_index = ancestor.node_index;
+
+        let mut edge_match = EdgeMatch {
+            overlap_type: EdgeMatchKind::WholeMatch,
+            shared_length: ancestor_length,
+        };
 
         // Run through character by character until we find the place
         // where these strings diverge
         // Start at the second character of the existing edge, and the next
         // character of our edge
-        let mut shared_length = 1;
         let mut index_in_edge = 1;
         let mut edges_agree = true;
-        while shared_length < ancestor_length && edges_agree {
+        while index_in_edge < ancestor_length && edges_agree {
             // Get next character of our string and compare to next
             // character of existing edge
             if let Some(c) = string_iterator.next() {
@@ -514,35 +528,58 @@ impl SuffixTrie {
                 debug!("Next character of suffix is {}, next ancestor character is {}", c, ancestor_c);
 
                 if c != ancestor_c {
-                    // This is where the edge we want to add diverges
-                    // from the existing edge
-                    debug!("Ancestor edge and our string diverge. Splitting ancestor edge here to add node for rest of suffix here");
-                    self.split_edge(parent_index,
-                                    index_in_edge);
-                    child_index = self.add_node(parent_index,
-                                                c,
-                                                start_index + index_in_edge,
-                                                string_iterator.count() + 1);
+                    edge_match = EdgeMatch {
+                        overlap_type: EdgeMatchKind::Diverge(c),
+                        shared_length: index_in_edge,
+                    };
                     edges_agree = false
-                } else {
-                    shared_length += 1;
                 }
             } else {
-                debug!("More characters in ancestor edge than our string. Splitting edge to add leaf in middle of ancestor edge.");
-                self.split_edge(parent_index,
-                                index_in_edge);
-                child_index = parent_index;
+                edge_match = EdgeMatch {
+                    overlap_type: EdgeMatchKind::EarlyStop,
+                    shared_length: index_in_edge,
+                };
                 edges_agree = false;
             }
             index_in_edge += 1;
         }
+
         debug!("Shared length with ancestor edge was {}", shared_length);
 
-        if edges_agree {
-            debug!("Entire ancestor edge matched with our string. No changes to this ancestor needed. Any remaining characters will be added below this node.");
-            child_index = parent_index;
-        }
-        (start_index + shared_length, child_index)
+        edge_match
+    }
+
+    fn insert_within_edge(&mut self,
+                          parent_index: usize,
+                          string_iterator: &mut Chars,
+                          start_index: usize) -> (usize, usize) {
+        let edge_match = self.consume_all_shared_length(parent_index,
+                                                        string_iterator);
+
+        let child_index = match edge_match.overlap_type {
+            EdgeMatchKind::WholeMatch =>  {
+                debug!("Entire ancestor edge matched with our string. No changes to this ancestor needed. Any remaining characters will be added below this node.");
+                parent_index
+            },
+            EdgeMatchKind::Diverge(last_char) => {
+                debug!("Ancestor edge and our string diverge. Splitting ancestor edge here to add node for rest of suffix here");
+                self.split_edge(parent_index,
+                                edge_match.shared_length);
+                self.add_node(parent_index,
+                              last_char,
+                              start_index + edge_match.shared_length,
+                              string_iterator.count() + 1)
+            },
+            EdgeMatchKind::EarlyStop => {
+                debug!("More characters in ancestor edge than our string. Splitting edge to add leaf in middle of ancestor edge.");
+                self.split_edge(parent_index,
+                                edge_match.shared_length);
+                parent_index
+            },
+            EdgeMatchKind::Unknown => panic!("Edge overlap type shouldn't be unknown")
+        };
+
+        (start_index + edge_match.shared_length, child_index)
     }
 
     fn get_node(&self, node_index: usize) -> &SubTrie {
