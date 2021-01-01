@@ -125,18 +125,14 @@ fn find_partial_matches_ignore() {
 fn matches_from_directory() {
     init();
     let mut trie = SuffixTrie::from_directory("./resources/tests/simple/").unwrap();
-    //# Try building up trie from individual files and check we get the same
-    let mut matches_A = trie.find_exact("ABCDEF");
+    println!("Result is {:#?}", trie);
+
+    let mut matches_A = trie.find_exact("AB");
     let mut matches_E = trie.find_exact("EFGHIJ");
     let mut matches_E_error = trie.find_edit_distance("EFxHIJ", 1);
     let mut matches_E_del = trie.find_edit_distance("EFHIJ", 1);
     let mut matches_E_ins = trie.find_edit_distance("EFGxHIJ", 1);
     let mut matches_H = trie.find_exact("HIJ\nA");
-    let first = matches_A.pop().unwrap();
-    let second = matches_A.pop().unwrap();
-    println!("{:#?}", first);
-    println!("{:#?}", trie.get_strings_of_match(&first, 2));
-    println!("{:#?}", trie.get_strings_of_match(&second, 2));
 
     let mut expected_A: Vec<Match> = vec![];
     let mut expected_E: Vec<Match> = vec![];
@@ -231,7 +227,16 @@ fn build_trie_from_file() {
     init();
     let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
     println!("Result is {:#?}", trie);
-    //trie.find_exact("drunken");
+}
+
+#[test]
+fn find_exact() {
+    let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
+    println!("Result is {:#?}", trie);
+    let matches = trie.find_exact("drunken");
+    assert_eq!(matches.len(), 3);
+    let matches = trie.find_exact("early");
+    assert_eq!(matches.len(), 1);
 }
 
 #[test]
