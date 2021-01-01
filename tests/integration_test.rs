@@ -229,7 +229,7 @@ fn match_str_is_match() {
 #[test]
 fn build_trie_from_file() {
     init();
-    let trie = SuffixTrie::from_file("resources/tests/simple/drunken.txt").unwrap();
+    let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
     println!("Result is {:#?}", trie);
     //trie.find_exact("drunken");
 }

@@ -34,7 +34,7 @@ mod tests {
 
         let trie = SuffixTrie::new("abcabdabe");
         println!("Result is {:#?}", trie);
-        assert_eq!(trie.len(), 1);
+        assert_eq!(trie.len(), 12);
     }
 
     #[test]
@@ -404,9 +404,11 @@ impl SuffixTrie {
             if let Some(ancestor_index) = parent.get_child_index(*c) {
                 // There is an existing node starting with this character
                 debug!("Found existing parent {}. Will add this suffix below this node.", ancestor_index);
-                child_index = self.insert_within_edge(*ancestor_index,
-                                                      &mut string_iterator,
-                                                      current_char_index);
+                let (cci, ci) = self.insert_within_edge(*ancestor_index,
+                                                        &mut string_iterator,
+                                                        current_char_index);
+                current_char_index = cci;
+                child_index = ci;
             } else {
                 // There is no edge, simply add a edge from this parent
                 // labelled with the rest of the string
@@ -418,7 +420,6 @@ impl SuffixTrie {
                 break;
             }
             parent_index = child_index;
-            current_char_index += 1;
         }
 
         debug!("Adding leaf for index_in_text {} to node {}", index_in_text, child_index);
@@ -426,22 +427,38 @@ impl SuffixTrie {
         final_node.add_leaf_child(Leaf::new(index_in_text, text_index));
     }
 
-    fn split_edge(&mut self, node_index: usize, new_length: usize) {
-        debug!("Splitting edge of {}. Edge to this node will have length {}", node_index, new_length);
+    /// Split the edge from the given node into two, the first part having length
+    /// first_length.
+    ///
+    ///                            L
+    /// Currently have grandparent -> parent (-> children)
+    ///                          X         Y
+    /// Want to have grandparent -> parent -> new (-> children)
+    /// I.e. the edge from grandparent to parent is now split into two, with
+    /// edge lengths X and Y, so that X+Y=L (original length) and X=first_length.
+    fn split_edge(&mut self, node_index: usize, first_length: usize) {
+        debug!("Splitting edge of {}. Edge to this node will have length {}", node_index, first_length);
         let mut parent = self.get_node_mut(node_index);
-        let new_edge_start_index = parent.edge_start_index + new_length;
-        let new_edge_length = parent.edge_length - new_length;
+        let new_edge_start_index = parent.edge_start_index + first_length;
+        let new_edge_length = parent.edge_length - first_length;
         // We are splitting the edge into two new edges, so the new
         // length must be shorter
-        assert!(parent.edge_length > new_length);
+        assert!(parent.edge_length > first_length);
 
-        parent.edge_length = new_length;
+        parent.edge_length = first_length;
+        // Extract existing children from this parent, we will add them to
+        // the new node.
+        let children: HashMap<char, usize> = parent.children.drain().collect();
+        let leaf_children: Vec<Leaf> = parent.leaf_children.drain(..).collect();
 
         let edge = self.str_storage[new_edge_start_index].clone();
-        self.add_node(node_index,
-                      edge,
-                      new_edge_start_index,
-                      new_edge_length);
+        let new_node_index = self.add_node(node_index,
+                                           edge,
+                                           new_edge_start_index,
+                                           new_edge_length);
+        let new_node = self.get_node_mut(new_node_index);
+        new_node.children = children;
+        new_node.leaf_children = leaf_children;
     }
 
 
@@ -475,7 +492,7 @@ impl SuffixTrie {
     fn insert_within_edge(&mut self,
                           parent_index: usize,
                           string_iterator: &mut Chars,
-                          start_index: usize) -> usize {
+                          start_index: usize) -> (usize, usize) {
         let ancestor = self.get_node(parent_index);
         let ancestor_start = ancestor.edge_start_index;
         let ancestor_length = ancestor.edge_length;
@@ -486,12 +503,13 @@ impl SuffixTrie {
         // Start at the second character of the existing edge, and the next
         // character of our edge
         let mut shared_length = 1;
+        let mut index_in_edge = 1;
         let mut edges_agree = true;
         while shared_length < ancestor_length && edges_agree {
             // Get next character of our string and compare to next
             // character of existing edge
             if let Some(c) = string_iterator.next() {
-                let index = ancestor_start + shared_length;
+                let index = ancestor_start + index_in_edge;
                 let ancestor_c = self.str_storage[index];
                 debug!("Next character of suffix is {}, next ancestor character is {}", c, ancestor_c);
 
@@ -500,29 +518,31 @@ impl SuffixTrie {
                     // from the existing edge
                     debug!("Ancestor edge and our string diverge. Splitting ancestor edge here to add node for rest of suffix here");
                     self.split_edge(parent_index,
-                                    shared_length);
+                                    index_in_edge);
                     child_index = self.add_node(parent_index,
                                                 c,
-                                                start_index + shared_length,
+                                                start_index + index_in_edge,
                                                 string_iterator.count() + 1);
                     edges_agree = false
+                } else {
+                    shared_length += 1;
                 }
             } else {
                 debug!("More characters in ancestor edge than our string. Splitting edge to add leaf in middle of ancestor edge.");
                 self.split_edge(parent_index,
-                                shared_length);
+                                index_in_edge);
                 child_index = parent_index;
                 edges_agree = false;
             }
-            shared_length += 1;
+            index_in_edge += 1;
         }
-        debug!("Shared length with ancestor edge was {}", shared_length - 1);
+        debug!("Shared length with ancestor edge was {}", shared_length);
 
         if edges_agree {
             debug!("Entire ancestor edge matched with our string. No changes to this ancestor needed. Any remaining characters will be added below this node.");
             child_index = parent_index;
         }
-        child_index
+        (start_index + shared_length, child_index)
     }
 
     fn get_node(&self, node_index: usize) -> &SubTrie {
