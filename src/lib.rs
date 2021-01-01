@@ -577,13 +577,13 @@ impl SuffixTrie {
     pub fn find_exact(&self, pattern: &str) -> Vec<Match> {
         let mut parent: &SubTrie = self.get_node(0);
         let ascii_pattern = deunicode::deunicode(pattern);
-        for c in ascii_pattern.chars() {
-            let child = parent.get_child_index(c);
-            match child {
-                Some(child_index) => {
-                    parent = self.get_node(*child_index);
-                },
-                None => return Vec::new()
+        let mut string_iterator = ascii_pattern.chars();
+        while let Some(c) = &string_iterator.next() {
+            if let Some(child_index) = parent.get_child_index(*c) {
+                parent = self.get_node(*child_index);
+            } else {
+                // No match
+                return Vec::new()
             }
         }
         let leaves = self.get_all_leaf_descendants(parent.node_index);
