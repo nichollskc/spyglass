@@ -644,6 +644,7 @@ impl SuffixTrie {
                            text_index: usize) -> usize{
         let mut num_chars = 0;
         let ascii_string = deunicode::deunicode(string);
+        self.str_storage.extend(ascii_string.chars());
 
         for (index, c) in ascii_string.char_indices() {
             num_chars += 1;
@@ -668,21 +669,21 @@ impl SuffixTrie {
         let mut child_index = 0;
         let mut string_iterator = string.chars();
         let mut current_char_index = index_in_text + self.texts[text_index].offset;
-        debug!("Adding string {} to tree {:#?}", string, self);
+        debug!("Adding suffix {} to tree {:#?}", string, self);
         while let Some(c) = &string_iterator.next() {
-            self.str_storage.push(*c);
-
             // Check if there is an edge starting with this char in the parent
             let parent: &SubTrie = self.get_node(parent_index);
-            debug!("Looking to add character {} to trie. Parent is {:#?}", *c, parent);
+            debug!("Looking to add character {} to trie. Parent is {}", *c, parent_index);
             if let Some(ancestor_index) = parent.get_child_index(*c) {
                 // There is an existing node starting with this character
+                debug!("Found existing parent {}. Will add this suffix below this node.", ancestor_index);
                 child_index = self.insert_within_edge(*ancestor_index,
                                                       &mut string_iterator,
                                                       current_char_index);
             } else {
                 // There is no edge, simply add a edge from this parent
                 // labelled with the rest of the string
+                debug!("No existing parent");
                 child_index = self.add_node(parent_index,
                                             *c,
                                             current_char_index,
@@ -693,11 +694,13 @@ impl SuffixTrie {
             current_char_index += 1;
         }
 
-        let parent: &mut SubTrie = self.get_node_mut(parent_index);
-        parent.add_leaf_child(Leaf::new(index_in_text, text_index));
+        debug!("Adding leaf for index_in_text {} to node {}", index_in_text, child_index);
+        let final_node: &mut SubTrie = self.get_node_mut(child_index);
+        final_node.add_leaf_child(Leaf::new(index_in_text, text_index));
     }
 
     fn split_edge(&mut self, node_index: usize, new_length: usize) {
+        debug!("Splitting edge of {}. Edge to this node will have length {}", node_index, new_length);
         let mut parent = self.get_node_mut(node_index);
         let new_edge_start_index = parent.edge_start_index + new_length;
         let new_edge_length = parent.edge_length - new_length;
@@ -722,6 +725,7 @@ impl SuffixTrie {
                 edge_length: usize) -> usize {
         let parent = self.get_node(parent_index);
         let child_index = self.node_storage.len();
+        debug!("Adding node {} to parent {} with edge {}, edge_start_index {} and edge_length {}", child_index, parent_index, edge, char_index, edge_length);
 
         // Create empty child node
         self.node_storage.push(SubTrie::empty(child_index,
@@ -760,14 +764,14 @@ impl SuffixTrie {
             // Get next character of our string and compare to next
             // character of existing edge
             if let Some(c) = string_iterator.next() {
-                self.str_storage.push(c);
-
                 let index = ancestor_start + shared_length;
                 let ancestor_c = self.str_storage[index];
+                debug!("Next character of suffix is {}, next ancestor character is {}", c, ancestor_c);
 
                 if c != ancestor_c {
                     // This is where the edge we want to add diverges
                     // from the existing edge
+                    debug!("Ancestor edge and our string diverge. Splitting ancestor edge here to add node for rest of suffix here");
                     self.split_edge(parent_index,
                                     shared_length);
                     child_index = self.add_node(parent_index,
@@ -777,8 +781,7 @@ impl SuffixTrie {
                     edges_agree = false
                 }
             } else {
-                // We have run out of characters from our string
-                // We need to split this edge in two.
+                debug!("More characters in ancestor edge than our string. Splitting edge to add leaf in middle of ancestor edge.");
                 self.split_edge(parent_index,
                                 shared_length);
                 child_index = parent_index;
@@ -786,8 +789,10 @@ impl SuffixTrie {
             }
             shared_length += 1;
         }
+        debug!("Shared length with ancestor edge was {}", shared_length - 1);
 
         if edges_agree {
+            debug!("Entire ancestor edge matched with our string. No changes to this ancestor needed. Any remaining characters will be added below this node.");
             child_index = parent_index;
         }
         child_index
