@@ -17,8 +17,9 @@ fn benchmark_dir_100(c: &mut Criterion) {
 
 fn benchmark_shakespeare_100(c: &mut Criterion) {
     c.bench_function("shakespeare_100", |b| b.iter(|| SuffixTrie::from_file(black_box("./resources/tests/large_100/shakespeare.txt"))));
+    c.bench_function("shakespeare_100_sent", |b| b.iter(|| SuffixTrie::from_file(black_box("./resources/tests/untokenized/shakespeare.txt"))));
 }
 
 criterion_group!(benches, benchmark_dir_100, benchmark_shakespeare_100, benchmark_find);
-criterion_group!(benches_quick, benchmark_find);
-criterion_main!(benches);
+criterion_group!(benches_quick, benchmark_shakespeare_100);// benchmark_find);
+criterion_main!(benches_quick);

@@ -1,8 +1,10 @@
 [package]
-name = "suffixtrie"
+name = "spyglass"
+description = "Search engine for documents, inspired by bioinformatics"
 version = "0.1.0"
 authors = ["Kath Nicholls <nichollskc@gmail.com>"]
 edition = "2018"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -17,7 +19,7 @@ serde = { version = "1.0", features = ["derive"] }
 criterion = "0.3"
 
 [[bench]]
-name = "suffixtrie_benchmark"
+name = "spyglass_benchmark"
 harness = false
 
 [profile.release]
