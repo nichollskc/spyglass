@@ -257,9 +257,41 @@ struct EdgeMatch {
     shared_length: usize,
 }
 
+#[derive(Clone,Copy,Debug,Eq,Hash)]
+struct CharLocation {
+    node_index: usize,
+    index_in_edge: usize,
+}
+
+impl Ord for CharLocation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.sort_key().cmp(&(other.sort_key()))
+    }
+}
+
+impl PartialOrd for CharLocation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for CharLocation {
+    fn eq(&self, other: &Self) -> bool {
+        self.sort_key() == other.sort_key()
+    }
+}
+
+impl CharLocation {
+    fn sort_key(&self) -> (usize, usize) {
+        // Prefer matches which have fewer errors, are shorter, in earlier
+        // texts and earlier within the text in which they appear
+        (self.node_index, self.index_in_edge)
+    }
+}
+
 #[derive(Clone,Copy,Debug)]
 struct WorkingMatch {
-    node_index: usize,
+    starting_char: CharLocation,
     errors: usize,
     length: usize,
 }
@@ -291,9 +323,9 @@ struct SubTrie {
 }
 
 impl WorkingMatch {
-    fn new(node_index: usize, errors: usize, length: usize) -> Self {
+    fn new(starting_char: CharLocation, errors: usize, length: usize) -> Self {
         WorkingMatch {
-            node_index,
+            starting_char,
             errors,
             length,
         }
@@ -805,8 +837,8 @@ impl SubTrie {
 
 #[derive(Clone,Debug)]
 struct WorkingMatchesSet {
-    indices: Vec<usize>,
-    working_matches: HashMap<usize, WorkingMatch>,
+    indices: Vec<CharLocation>,
+    working_matches: HashMap<CharLocation, WorkingMatch>,
 }
 
 impl WorkingMatchesSet {
@@ -819,13 +851,17 @@ impl WorkingMatchesSet {
 
     fn only_root_node() -> Self {
         let mut working_matches_set = WorkingMatchesSet::empty();
-        working_matches_set.add_working_match(0, 0, 0);
+        let root_location = CharLocation {
+            node_index: 0,
+            index_in_edge: 0,
+        };
+        working_matches_set.add_working_match(root_location, 0, 0);
         working_matches_set
     }
 
-    fn add_working_match(&mut self, index: usize, errors: usize, length: usize) {
+    fn add_working_match(&mut self, starting_char: CharLocation, errors: usize, length: usize) {
         let mut min_errors = errors;
-        if let Some(existing_match) = self.working_matches.get(&index) {
+        if let Some(existing_match) = self.working_matches.get(&starting_char) {
             // We will reinsert this index with the minimum number of errors
             // we have found - there are multiple paths leading to the same
             // node
@@ -833,11 +869,11 @@ impl WorkingMatchesSet {
             min_errors = cmp::min(errors, existing_match.errors);
         } else {
             // This entry didn't already exist, add to vec of indices
-            self.indices.push(index);
+            self.indices.push(starting_char);
         }
         // Update the error count for this node
-        let match_obj = WorkingMatch::new(index, min_errors, length);
-        self.working_matches.insert(index, match_obj);
+        let match_obj = WorkingMatch::new(starting_char, min_errors, length);
+        self.working_matches.insert(starting_char, match_obj);
     }
 
     fn is_empty(&self) -> bool {
@@ -879,31 +915,31 @@ impl SuffixTrieEditMatcher {
         }
     }
 
-    fn add_this_generation(&mut self, errors: usize, index: usize, length: usize) {
+    fn add_this_generation(&mut self, errors: usize, location: CharLocation, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
         if errors <= self.max_errors {
-            self.matches_this_gen.add_working_match(index, errors, length);
+            self.matches_this_gen.add_working_match(location, errors, length);
         }
     }
 
-    fn add_next_generation(&mut self, errors: usize, index: usize, length: usize) {
+    fn add_next_generation(&mut self, errors: usize, location: CharLocation, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
         if errors <= self.max_errors {
-            self.matches_next_gen.add_working_match(index, errors, length);
+            self.matches_next_gen.add_working_match(location, errors, length);
         }
     }
 
     fn add_after_pattern_delete(&mut self, existing_match: WorkingMatch) {
         self.add_next_generation(existing_match.errors + 1,
-                                 existing_match.node_index,
+                                 existing_match.starting_char,
                                  existing_match.length);
     }
 
     fn add_after_text_delete(&mut self,
                              existing_match: WorkingMatch,
-                             child_index: usize) {
+                             child: CharLocation) {
         self.add_this_generation(existing_match.errors + 1,
-                                 child_index,
+                                 child,
                                  existing_match.length + 1);
     }
 
@@ -914,7 +950,7 @@ impl SuffixTrieEditMatcher {
     /// increases error by 1.
     fn add_after_mismatch(&mut self,
                           existing_match: WorkingMatch,
-                          child_index: usize,
+                          child: CharLocation,
                           pattern_char: &char,
                           edge: &char) {
         let mut errors_after_match = existing_match.errors;
@@ -928,15 +964,44 @@ impl SuffixTrieEditMatcher {
             // Else this is a mismatch - increment the error counter
             errors_after_match += 1;
         }
-        debug!("Adding node {} with errors {} - match/mismatch", child_index, errors_after_match);
+        debug!("Adding node {:?} with errors {} - match/mismatch", child, errors_after_match);
         self.add_next_generation(errors_after_match,
-                                 child_index,
+                                 child,
                                  existing_match.length + 1);
     }
 
     fn go_to_next_generation(&mut self) {
         self.matches_this_gen = self.matches_next_gen.clone();
         self.matches_next_gen = WorkingMatchesSet::empty();
+    }
+
+    fn generation_after_char_dict(&self,
+                                  suffix_trie: &SuffixTrie,
+                                  char_location: CharLocation) -> HashMap<char, CharLocation> {
+        let this_node = suffix_trie.get_node(char_location.node_index);
+        let mut result = HashMap::new();
+        if char_location.index_in_edge < this_node.edge_length - 1 {
+            // This char is at the end of the string of its node, so children
+            // of the char are the children of the node itself
+            for (edge, child_index) in this_node.children.iter() {
+                let child_location = CharLocation {
+                    node_index: *child_index,
+                    index_in_edge: 0,
+                };
+                result.insert(*edge, child_location);
+            }
+        } else {
+            // Only one child - the charlocation after this one in the edge of
+            // this node
+            let new_edge_start_index = char_location.index_in_edge + 1;
+            let child_location = CharLocation {
+                node_index: char_location.node_index,
+                index_in_edge: new_edge_start_index,
+            };
+            let edge = suffix_trie.str_storage[new_edge_start_index].clone();
+            result.insert(edge, child_location);
+        }
+        return result
     }
 
     fn find_edit_distance_ignore(&mut self,
@@ -951,16 +1016,17 @@ impl SuffixTrieEditMatcher {
                 debug!("Matching nodes: {:#?}", self);
                 while let Some(parent_match) = self.matches_this_gen.next() {
                     debug!("Parent match: {:?}", parent_match);
-                    let parent = suffix_trie.get_node(parent_match.node_index);
-                    for (edge, child_index) in parent.children.iter() {
+                    let children = self.generation_after_char_dict(suffix_trie,
+                                                                   parent_match.starting_char);
+                    for (edge, child) in children.iter() {
                         debug!("Considering child {}", edge);
                         self.add_after_mismatch(parent_match,
-                                                *child_index,
+                                                *child,
                                                 &c,
                                                 &edge);
                         self.add_after_pattern_delete(parent_match);
                         self.add_after_text_delete(parent_match,
-                                                   *child_index);
+                                                   *child);
                     }
                     debug!("Left this gen {:#?}", self.matches_this_gen);
                     debug!("Left next gen: {:#?}", self.matches_next_gen);
@@ -974,9 +1040,9 @@ impl SuffixTrieEditMatcher {
             }
             let mut matches = vec![];
             while let Some(parent_match) = self.matches_this_gen.next() {
-                let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.node_index);
+                let leaf_children = suffix_trie.get_all_leaf_descendants(parent_match.starting_char.node_index);
                 debug!("Matching node: {:#?} with children {:#?}",
-                       parent_match.node_index,
+                       parent_match.starting_char.node_index,
                        leaf_children);
                 let parent_matches = suffix_trie.match_array_from_leaves(leaf_children,
                                                                          parent_match.length,
