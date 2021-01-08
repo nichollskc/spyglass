@@ -973,7 +973,7 @@ impl SuffixTrieEditMatcher {
                                   char_location: CharLocation) -> HashMap<char, CharLocation> {
         let this_node = suffix_trie.get_node(char_location.node_index);
         let mut result = HashMap::new();
-        if char_location.index_in_edge >= this_node.edge_length {
+        if char_location.index_in_edge + 1 >= this_node.edge_length {
             // This char is at the end of the string of its node, so children
             // of the char are the children of the node itself
             for (edge, child_index) in this_node.children.iter() {
