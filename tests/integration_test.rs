@@ -2,7 +2,7 @@ use std::collections::{HashMap,HashSet};
 
 use env_logger;
 
-use suffixtrie::{Match,SuffixTrie};
+use spyglass::{Match,SuffixTrie};
 
 fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
