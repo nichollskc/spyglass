@@ -1,3 +1,4 @@
+use std::cmp;
 use std::collections::HashMap;
 
 use utilities;
@@ -191,9 +192,9 @@ fn matches_from_directory() {
     }
     compare_matches(expected_a, matches_a);
     compare_matches(expected_e, matches_e);
-//    compare_matches(expected_e_error, matches_e_error);
-//    compare_matches(expected_e_del, matches_e_del);
-//    compare_matches(expected_e_ins, matches_e_ins);
+    compare_matches(expected_e_error, matches_e_error);
+    compare_matches(expected_e_del, matches_e_del);
+    compare_matches(expected_e_ins, matches_e_ins);
 
     for text_index in vec![0, 1, 2] {
         for line in vec![0, 1, 2, 4, 5] {
@@ -218,12 +219,27 @@ fn match_str_is_match() {
     println!("Made trie!");
     let matches = trie.find_exact("ell");
     for match_obj in matches {
-        for context in vec![0, 1, 5, 10] {
+        for context in vec![0, 1, 5, 10, 18] {
+            println!("Asking for {} lines around match {:#?}", context, match_obj);
             let (before, matching, after) = trie.get_strings_of_match(&match_obj,
                                                                       context);
             assert_eq!("ell", matching);
-            //assert_eq!(before.match_indices('\n').count(), context);
-            //assert_eq!(after.match_indices('\n').count(), context);
+
+            let line_breaks_before = if match_obj.text_index == 1 && match_obj.start_line == 18 {
+                cmp::min(context, 17)
+            } else {
+                context
+            };
+            assert_eq!(before.match_indices('\n').count(), line_breaks_before);
+
+            let line_breaks_after = if match_obj.text_index == 1 && match_obj.start_line == 93 {
+                cmp::min(context + 1, 7)
+            } else if match_obj.text_index == 1 && match_obj.start_line == 98 {
+                cmp::min(context + 1, 2)
+            } else {
+                context + 1
+            };
+            assert_eq!(after.match_indices('\n').count(), line_breaks_after);
         }
     }
 }
@@ -258,10 +274,10 @@ fn build_dodgy_characters() {
 fn match_dodgy_characters() {
     utilities::init_testing();
     //                          012345678901234567890123456789012345678901
-    let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
+    let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfrixxAElfredxx<<STOP>>…he");
+    println!("{:#?}", trie);
     let alf_matches = trie.find_exact("xxÆlf");
     let alf_matches_edit_0 = trie.find_edit_distance("xxÆlf", 0);
-    //let alf_matches_edit_1 = trie.find_edit_distance("xxÆlf", 1);
     let alf_match = Match {
         text_index: 0,
         index_in_str: 9,
@@ -274,21 +290,33 @@ fn match_dodgy_characters() {
         index_in_str: 18,
         ..alf_match
     };
-    let alf_match3 = Match {
-        index_in_str: 27,
-        errors: 1,
-        length: 5,
-        ..alf_match
-    };
     let alf_match4 = Match {
-        index_in_str: 35,
+        index_in_str: 34,
         ..alf_match
     };
-    let alf_expected = vec![alf_match.clone(),
-    alf_match2.clone(),
-    alf_match4.clone()];
-    let alf_expected_edit_1 = vec![alf_match, alf_match2, alf_match3, alf_match4];
+    let alf_expected = vec![alf_match.clone(), alf_match2.clone(), alf_match4.clone()];
     compare_matches(alf_expected.clone(), alf_matches);
-    //compare_matches(alf_expected, alf_matches_edit_0);
-    //compare_matches(alf_expected_edit_1, alf_matches_edit_1);
+    compare_matches(alf_expected, alf_matches_edit_0);
+
+    let alfric_matches = trie.find_edit_distance("xxÆlfricxx", 2);
+    let alfric_match = Match {
+        errors: 2,
+        length: 11,
+        ..alf_match
+    };
+    let alfric_match2 = Match {
+        index_in_str: 18,
+        ..alfric_match
+    };
+    let alfric_match3 = Match {
+        index_in_str: 27,
+        length: 9,
+        ..alfric_match
+    };
+    let alfric_match4 = Match {
+        index_in_str: 34,
+        ..alfric_match
+    };
+    let alfric_expected = vec![alfric_match, alfric_match2, alfric_match3, alfric_match4];
+    compare_matches(alfric_expected, alfric_matches);
 }
