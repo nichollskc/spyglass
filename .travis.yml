@@ -14,4 +14,4 @@ cache: cargo
 script:
   - cargo build --verbose
   - cargo test --verbose
-  - cargo bench --verbose
+  - ./benchmark.sh
