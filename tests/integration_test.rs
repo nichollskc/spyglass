@@ -1,12 +1,8 @@
 use std::collections::HashMap;
 
-use env_logger;
+use utilities;
 
 use spyglass::{Match,SuffixTrie};
-
-fn init() {
-    let _ = env_logger::builder().is_test(true).try_init();
-}
 
 fn compare_match_indices(matches: Vec<Match>, indices: Vec<usize>) {
     let match_indices: Vec<usize> = matches.iter().map(|l| l.index_in_str).collect();
@@ -21,7 +17,7 @@ fn compare_matches(mut expected: Vec<Match>, mut matches: Vec<Match>) {
 
 #[test]
 fn serialize_tests() {
-    init();
+    utilities::init_testing();
     serialize("aba", false);
     serialize("jfkds.}laN= -;a|ba", false);
     serialize("asab", false);
@@ -45,7 +41,7 @@ fn serialize(contents: &str, check_reconstruct: bool) {
 
 #[test]
 fn find_matches() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::new("aba");
     println!("Result is {:#?}", trie);
 
@@ -64,7 +60,7 @@ fn find_matches() {
 
 #[test]
 fn find_matches_0_edit() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::new("aba");
     println!("Result is {:#?}", trie);
 
@@ -83,7 +79,7 @@ fn find_matches_0_edit() {
 
 #[test]
 fn find_matches_mismatch() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::new("abcXef abXdef");
     println!("Result is {:#?}", trie);
 
@@ -93,7 +89,7 @@ fn find_matches_mismatch() {
 
 #[test]
 fn find_matches_insert_delete() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::new("abcXdefg");
     println!("Result is {:#?}", trie);
 
@@ -108,7 +104,7 @@ fn find_matches_insert_delete() {
 
 #[test]
 fn find_partial_matches_ignore() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::new("He wracked wrack'd wrack'ed");
     println!("Result is {:#?}", trie);
 
@@ -123,7 +119,7 @@ fn find_partial_matches_ignore() {
 
 #[test]
 fn matches_from_directory() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::from_directory("./resources/tests/simple/").unwrap();
     println!("Result is {:#?}", trie);
 
@@ -207,7 +203,7 @@ fn matches_from_directory() {
 
 #[test]
 fn match_str_is_match() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::from_directory("./resources/tests/large_100/").unwrap();
     println!("Made trie!");
     let matches = trie.find_exact("ell");
@@ -224,7 +220,7 @@ fn match_str_is_match() {
 
 #[test]
 fn build_trie_from_file() {
-    init();
+    utilities::init_testing();
     let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
     println!("Result is {:#?}", trie);
 }
@@ -250,7 +246,7 @@ fn build_dodgy_characters() {
 
 #[test]
 fn match_dodgy_characters() {
-    init();
+    utilities::init_testing();
     //                          012345678901234567890123456789012345678901
     let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
     let alf_matches = trie.find_exact("xxÆlf");

@@ -15,16 +15,11 @@ mod tests {
     use super::*;
 
     use std::collections::HashSet;
-
-    use env_logger;
-
-    fn init() {
-        let _ = env_logger::builder().is_test(true).try_init();
-    }
+    use utilities;
 
     #[test]
     fn test_build_size() {
-        init();
+        utilities::init_testing();
         let mut trie = SuffixTrie::empty();
         trie.add_sentences_from_text("test", "ABCDE.<<STOP>>ABCDE.<<STOP>>ABCDE.");
         println!("Result is {:#?}", trie);
@@ -40,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_build_leaves() {
-        init();
+        utilities::init_testing();
         helper_test_leaves("abcdefghijk");
         helper_test_leaves("ababacababccbabcbabccbabcbababcbcbabcbbacbcbabcab");
     }
@@ -65,7 +60,7 @@ mod tests {
 
     #[test]
     fn line_number_calculation() {
-        init();
+        utilities::init_testing();
         let text = Text {
             line_start_indices: vec![0, 10, 20, 30, 40, 50, 60, 70],
             ..Text::new("noname", 0)
