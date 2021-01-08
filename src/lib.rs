@@ -469,10 +469,11 @@ impl SuffixTrie {
     /// Split the edge from the given node into two, the first part having length
     /// first_length.
     ///
-    ///                            L
-    /// Currently have grandparent -> parent (-> children)
-    ///                          X         Y
-    /// Want to have grandparent -> parent -> new (-> children)
+    /// Currently:  L
+    /// grandparent -> parent (-> children)
+    ///
+    /// Want:       X         Y
+    /// grandparent -> parent -> new (-> children)
     /// I.e. the edge from grandparent to parent is now split into two, with
     /// edge lengths X and Y, so that X+Y=L (original length) and X=first_length.
     fn split_edge(&mut self, node_index: usize, first_length: usize) {
