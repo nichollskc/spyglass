@@ -1,4 +1,4 @@
-use std::collections::{HashMap,HashSet};
+use std::collections::HashMap;
 
 use env_logger;
 
@@ -124,25 +124,25 @@ fn find_partial_matches_ignore() {
 #[test]
 fn matches_from_directory() {
     init();
-    let mut trie = SuffixTrie::from_directory("./resources/tests/simple/").unwrap();
+    let trie = SuffixTrie::from_directory("./resources/tests/simple/").unwrap();
     println!("Result is {:#?}", trie);
 
-    let mut matches_A = trie.find_exact("ABCDEF");
-    let mut matches_E = trie.find_exact("EFGHIJ");
-    let mut matches_E_error = trie.find_edit_distance("EFxHIJ", 1);
-    let mut matches_E_del = trie.find_edit_distance("EFHIJ", 1);
-    let mut matches_E_ins = trie.find_edit_distance("EFGxHIJ", 1);
-    let mut matches_H = trie.find_exact("HIJ\nA");
+    let matches_a = trie.find_exact("ABCDEF");
+    let matches_e = trie.find_exact("EFGHIJ");
+    let matches_e_error = trie.find_edit_distance("EFxHIJ", 1);
+    let matches_e_del = trie.find_edit_distance("EFHIJ", 1);
+    let matches_e_ins = trie.find_edit_distance("EFGxHIJ", 1);
+    let matches_h = trie.find_exact("HIJ\nA");
 
-    let mut expected_A: Vec<Match> = vec![];
-    let mut expected_E: Vec<Match> = vec![];
-    let mut expected_E_error: Vec<Match> = vec![];
-    let mut expected_E_del: Vec<Match> = vec![];
-    let mut expected_E_ins: Vec<Match> = vec![];
-    let mut expected_H: Vec<Match> = vec![];
+    let mut expected_a: Vec<Match> = vec![];
+    let mut expected_e: Vec<Match> = vec![];
+    let mut expected_e_error: Vec<Match> = vec![];
+    let mut expected_e_del: Vec<Match> = vec![];
+    let mut expected_e_ins: Vec<Match> = vec![];
+    let mut expected_h: Vec<Match> = vec![];
     for text_index in vec![0, 1, 2] {
         for line in 0..7 {
-            let first_match_A = Match {
+            let first_match_a = Match {
                 text_index,
                 index_in_str: 0 + 22*line,
                 start_line: line,
@@ -150,48 +150,48 @@ fn matches_from_directory() {
                 length: 6,
                 errors: 0,
             };
-            let second_match_A = Match {
+            let second_match_a = Match {
                 index_in_str: 11 + 22*line,
-                ..first_match_A
+                ..first_match_a
             };
 
-            let first_match_E = Match {
+            let first_match_e = Match {
                 index_in_str: 4 + 22*line,
-                ..first_match_A
+                ..first_match_a
             };
-            let second_match_E = Match {
+            let second_match_e = Match {
                 index_in_str: 15 + 22*line,
-                ..first_match_A
+                ..first_match_a
             };
-            let first_match_E_error = Match {
+            let first_match_e_error = Match {
                 errors: 1,
-                ..first_match_E
+                ..first_match_e
             };
-            let second_match_E_error = Match {
+            let second_match_e_error = Match {
                 errors: 1,
-                ..second_match_E
+                ..second_match_e
             };
-            expected_A.push(first_match_A);
-            expected_A.push(second_match_A);
-            expected_E.push(first_match_E);
-            expected_E.push(second_match_E);
-            expected_E_error.push(first_match_E_error.clone());
-            expected_E_error.push(second_match_E_error.clone());
-            expected_E_del.push(first_match_E_error.clone());
-            expected_E_del.push(second_match_E_error.clone());
-            expected_E_ins.push(first_match_E_error.clone());
-            expected_E_ins.push(second_match_E_error.clone());
+            expected_a.push(first_match_a);
+            expected_a.push(second_match_a);
+            expected_e.push(first_match_e);
+            expected_e.push(second_match_e);
+            expected_e_error.push(first_match_e_error.clone());
+            expected_e_error.push(second_match_e_error.clone());
+            expected_e_del.push(first_match_e_error.clone());
+            expected_e_del.push(second_match_e_error.clone());
+            expected_e_ins.push(first_match_e_error.clone());
+            expected_e_ins.push(second_match_e_error.clone());
         }
     }
-    compare_matches(expected_A, matches_A);
-    compare_matches(expected_E, matches_E);
-//    compare_matches(expected_E_error, matches_E_error);
-//    compare_matches(expected_E_del, matches_E_del);
-//    compare_matches(expected_E_ins, matches_E_ins);
+    compare_matches(expected_a, matches_a);
+    compare_matches(expected_e, matches_e);
+//    compare_matches(expected_e_error, matches_e_error);
+//    compare_matches(expected_e_del, matches_e_del);
+//    compare_matches(expected_e_ins, matches_e_ins);
 
     for text_index in vec![0, 1, 2] {
         for line in vec![0, 1, 2, 4, 5] {
-            let match_H = Match {
+            let match_h = Match {
                 text_index,
                 index_in_str: 18 + 22*line,
                 start_line: line,
@@ -199,10 +199,10 @@ fn matches_from_directory() {
                 length: 5,
                 errors: 0,
             };
-            expected_H.push(match_H);
+            expected_h.push(match_h);
         }
     }
-    compare_matches(expected_H, matches_H);
+    compare_matches(expected_h, matches_h);
 }
 
 #[test]
@@ -241,11 +241,11 @@ fn find_exact() {
 
 #[test]
 fn build_dodgy_characters() {
-    let trie = SuffixTrie::new("father’s");
-    let trie = SuffixTrie::new("Ælfred");
-    let trie = SuffixTrie::new("…he");
-    let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred…he");
-    let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
+    let _trie = SuffixTrie::new("father’s");
+    let _trie = SuffixTrie::new("Ælfred");
+    let _trie = SuffixTrie::new("…he");
+    let _trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred…he");
+    let _trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfredxxAElfred<<STOP>>…he");
 }
 
 #[test]

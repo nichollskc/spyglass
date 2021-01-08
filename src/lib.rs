@@ -3,11 +3,9 @@ use std::cmp::Ordering;
 use std::fs;
 use std::io;
 use std::io::{Error,ErrorKind};
-use std::path::Path;
-use std::collections::{HashMap,HashSet};
+use std::collections::HashMap;
 use std::str::Chars;
 
-use bincode;
 use deunicode;
 use log::{info,warn,debug,error};
 use serde::{Serialize,Deserialize};
@@ -15,6 +13,9 @@ use serde::{Serialize,Deserialize};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::collections::HashSet;
+
     use env_logger;
 
     fn init() {
@@ -181,7 +182,7 @@ impl Text {
     }
 
     fn char_before_line(&self, char_index: usize, line_index: usize) -> bool {
-        let mut is_before_line;
+        let is_before_line;
         if line_index == self.line_start_indices.len() {
             // This is an invalid line index (too high) so the character
             // must come on a line before this one
@@ -246,7 +247,6 @@ impl Text {
 }
 
 enum EdgeMatchKind {
-    Unknown,
     WholeMatch,
     EarlyStop,
     Diverge(char),
@@ -344,7 +344,7 @@ impl SuffixTrie {
     /// New empty suffix trie
     pub fn empty() -> Self {
         let root_node = SubTrie::empty(0, 0, 0);
-        let mut suffix_trie = SuffixTrie {
+        let suffix_trie = SuffixTrie {
             str_storage: vec![],
             node_storage: vec![root_node],
             texts: vec![],
@@ -511,9 +511,9 @@ impl SuffixTrie {
                 edge: char,
                 char_index: usize,
                 edge_length: usize) -> usize {
-        let parent = self.get_node(parent_index);
         let child_index = self.node_storage.len();
-        debug!("Adding node {} to parent {} with edge {}, edge_start_index {} and edge_length {}", child_index, parent_index, edge, char_index, edge_length);
+        debug!("Adding node {} to parent {} with edge {}, edge_start_index {} and edge_length {}",
+               child_index, parent_index, edge, char_index, edge_length);
 
         // Create empty child node
         self.node_storage.push(SubTrie::empty(child_index,
@@ -608,7 +608,6 @@ impl SuffixTrie {
                                 edge_match.shared_length);
                 parent_index
             },
-            EdgeMatchKind::Unknown => panic!("Edge overlap type shouldn't be unknown")
         };
 
         (start_index + edge_match.shared_length, child_index)
@@ -671,7 +670,6 @@ impl SuffixTrie {
                         parent = self.get_node(*child_index);
                         assert!(!&string_iterator.next().is_some())
                     }
-                    EdgeMatchKind::Unknown => panic!("EdgeMatchKind somehow uninitialised!"),
                 }
             } else {
                 // No match
