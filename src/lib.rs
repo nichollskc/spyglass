@@ -973,7 +973,7 @@ impl SuffixTrieEditMatcher {
                                   char_location: CharLocation) -> HashMap<char, CharLocation> {
         let this_node = suffix_trie.get_node(char_location.node_index);
         let mut result = HashMap::new();
-        if char_location.index_in_edge < this_node.edge_length - 1 {
+        if char_location.index_in_edge >= this_node.edge_length {
             // This char is at the end of the string of its node, so children
             // of the char are the children of the node itself
             for (edge, child_index) in this_node.children.iter() {
@@ -983,6 +983,7 @@ impl SuffixTrieEditMatcher {
                 };
                 result.insert(*edge, child_location);
             }
+            debug!("Children of location {:?} are children of the node", char_location);
         } else {
             // Only one child - the charlocation after this one in the edge of
             // this node
@@ -991,9 +992,11 @@ impl SuffixTrieEditMatcher {
                 node_index: char_location.node_index,
                 index_in_edge: new_edge_start_index,
             };
-            let edge = suffix_trie.str_storage[new_edge_start_index].clone();
+            let edge = suffix_trie.str_storage[this_node.edge_start_index + new_edge_start_index].clone();
             result.insert(edge, child_location);
+            debug!("Only child of location {:?} is the next character in the edge of the node", char_location);
         }
+        debug!("Children are {:#?}", result);
         return result
     }
 

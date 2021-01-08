@@ -59,6 +59,16 @@ fn find_matches() {
 }
 
 #[test]
+fn find_matches_0_edit_no_branches() {
+    utilities::init_testing();
+    let trie = SuffixTrie::new("abcdef");
+    println!("Result is {:#?}", trie);
+
+    let matches = trie.find_edit_distance("bcd", 0);
+    compare_match_indices(matches, vec![1]);
+}
+
+#[test]
 fn find_matches_0_edit() {
     utilities::init_testing();
     let trie = SuffixTrie::new("aba");
