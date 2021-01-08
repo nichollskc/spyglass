@@ -1,0 +1,17 @@
+language: rust
+rust:
+  - stable
+  - beta
+  - nightly
+jobs:
+  # Allow nightly build to fail
+  allow_failures:
+    - rust: nightly
+  # Don't wait for nightly to finish building to mark a run as passed
+  #		(since its failure won't affect the overall pass/fail status of the run)
+  fast_finish: true
+cache: cargo
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+  - cargo bench --verbose
