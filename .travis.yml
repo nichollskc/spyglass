@@ -1,7 +1,4 @@
 language: rust
-  - stable
-  - beta
-  - nightly
 matrix:
   include:
   - rust: stable
