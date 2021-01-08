@@ -1,14 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use suffixtrie::SuffixTrie;
+use spyglass::SuffixTrie;
 
 fn benchmark_find(c: &mut Criterion) {
-    c.bench_function("paradise", |b| b.iter(|| {
-        let trie = SuffixTrie::from_file(black_box("./resources/tests/large_100/para.txt")).unwrap();
-        trie.find_exact("that");
-        trie.find_edit_distance("that", 0);
-        trie.find_edit_distance("loss ofEdEN", 2);
-    }));
+    let trie = SuffixTrie::from_file(black_box("./resources/tests/large_100/para.txt")).unwrap();
+    c.bench_function("find_exact_para", |b| b.iter(|| black_box(&trie).find_exact("that")));
+    c.bench_function("find_edit_0_para", |b| b.iter(|| black_box(&trie).find_edit_distance("that", 0)));
+    c.bench_function("find_edit_0_para", |b| b.iter(|| black_box(&trie).find_edit_distance("loss ofEdEN", 2)));
 }
 
 fn benchmark_dir_100(c: &mut Criterion) {
@@ -22,4 +20,4 @@ fn benchmark_shakespeare_100(c: &mut Criterion) {
 
 criterion_group!(benches, benchmark_dir_100, benchmark_shakespeare_100, benchmark_find);
 criterion_group!(benches_quick, benchmark_shakespeare_100);// benchmark_find);
-criterion_main!(benches_quick);
+criterion_main!(benches);
