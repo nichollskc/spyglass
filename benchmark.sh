@@ -10,16 +10,25 @@ cd  "${TRAVIS_REPO_SLUG}-bench" && \
 git checkout master && \
 cargo bench -- --save-baseline master && \
 cargo run --example save_to_file resources/tests/large_100/ master_large_100.sst && \
+cargo run --example save_to_file resources/tests/full/ master_full.sst && \
 
 # Bench current branch
 git checkout ${TRAVIS_COMMIT}^1 && \
 cargo bench -- --save-baseline before && \
 cargo run --example save_to_file resources/tests/large_100/ before_large_100.sst && \
+cargo run --example save_to_file resources/tests/full/ before_full.sst && \
 
 # Bench current branch
 git checkout ${TRAVIS_COMMIT} && \
 cargo bench -- --save-baseline current && \
 cargo run --example save_to_file resources/tests/large_100/ current_large_100.sst && \
+cargo run --example save_to_file resources/tests/full/ current_full.sst && \
+
+# Install https://github.com/BurntSushi/critcmp
+cargo install critcmp --force && \
+
+# Compare the two generated benches
+critcmp master before current && \
 
 # Display the file sizes
 ls -lh ./

@@ -22,6 +22,8 @@ matrix:
 script:
   - cargo build --verbose
   - cargo test --verbose
+# Run benchmarks after success so they don't interfere with the cache
+after_success:
   - ./benchmark.sh
 # Need to cache the whole `.cargo` directory to keep .crates.toml for
 # cargo-update to work
