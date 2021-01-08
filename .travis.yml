@@ -1,9 +1,18 @@
 language: rust
-rust:
   - stable
   - beta
   - nightly
-jobs:
+matrix:
+  include:
+  - rust: stable
+  - rust: beta
+    branches:
+      only:
+      - dev
+  - rust: nightly
+    branches:
+      only:
+      - dev
   # Allow nightly build to fail
   allow_failures:
     - rust: nightly
