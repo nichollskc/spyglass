@@ -46,16 +46,16 @@ fn find_matches() {
     let trie = SuffixTrie::new("aba");
     println!("Result is {:#?}", trie);
 
-    let matches = trie.find_exact("a");
+    let matches = trie.find_exact("a", false);
     compare_match_indices(matches, vec![0, 2]);
 
     let trie = SuffixTrie::new("bananaBal");
     println!("Result is {:#?}", trie);
 
-    let matches = trie.find_exact("an");
+    let matches = trie.find_exact("an", false);
     compare_match_indices(matches, vec![1, 3]);
 
-    let matches = trie.find_exact("ab");
+    let matches = trie.find_exact("ab", false);
     compare_match_indices(matches, vec![]);
 }
 
@@ -122,9 +122,9 @@ fn find_partial_matches_ignore() {
     let mut ignored = HashMap::new();
     ignored.insert('e', true);
     ignored.insert('\'', true);
-    let matches = trie.find_edit_distance_ignore("wrackd", 0, ignored.clone());
+    let matches = trie.find_edit_distance_ignore("wrackd", 0, ignored.clone(), false);
     compare_match_indices(matches, vec![3, 11, 19]);
-    let matches = trie.find_edit_distance_ignore("wrack'de", 0, ignored.clone());
+    let matches = trie.find_edit_distance_ignore("wrack'de", 0, ignored.clone(), false);
     compare_match_indices(matches, vec![3, 11, 19]);
 }
 
@@ -134,12 +134,12 @@ fn matches_from_directory() {
     let trie = SuffixTrie::from_directory("./resources/tests/simple/").unwrap();
     println!("Result is {:#?}", trie);
 
-    let matches_a = trie.find_exact("ABCDEF");
-    let matches_e = trie.find_exact("EFGHIJ");
+    let matches_a = trie.find_exact("ABCDEF", false);
+    let matches_e = trie.find_exact("EFGHIJ", false);
     let matches_e_error = trie.find_edit_distance("EFxHIJ", 1);
     let matches_e_del = trie.find_edit_distance("EFHIJ", 1);
     let matches_e_ins = trie.find_edit_distance("EFGxHIJ", 1);
-    let matches_h = trie.find_exact("HIJ\nA");
+    let matches_h = trie.find_exact("HIJ\nA", false);
 
     let mut expected_a: Vec<Match> = vec![];
     let mut expected_e: Vec<Match> = vec![];
@@ -217,7 +217,7 @@ fn match_str_is_match() {
     utilities::init_testing();
     let trie = SuffixTrie::from_directory("./resources/tests/large_100/").unwrap();
     println!("Made trie!");
-    let matches = trie.find_exact("ell");
+    let matches = trie.find_exact("ell", false);
     for match_obj in matches {
         for context in vec![0, 1, 5, 10, 18] {
             println!("Asking for {} lines around match {:#?}", context, match_obj);
@@ -255,9 +255,9 @@ fn build_trie_from_file() {
 fn find_exact() {
     let trie = SuffixTrie::from_file("resources/tests/simple/small.txt").unwrap();
     println!("Result is {:#?}", trie);
-    let matches = trie.find_exact("drunken");
+    let matches = trie.find_exact("drunken", false);
     assert_eq!(matches.len(), 3);
-    let matches = trie.find_exact("early");
+    let matches = trie.find_exact("early", false);
     assert_eq!(matches.len(), 1);
 }
 
@@ -276,7 +276,7 @@ fn match_dodgy_characters() {
     //                          012345678901234567890123456789012345678901
     let trie = SuffixTrie::new("father’s xxÆlfredxxÆlfredxxAlfrixxAElfredxx<<STOP>>…he");
     println!("{:#?}", trie);
-    let alf_matches = trie.find_exact("xxÆlf");
+    let alf_matches = trie.find_exact("xxÆlf", false);
     let alf_matches_edit_0 = trie.find_edit_distance("xxÆlf", 0);
     let alf_match = Match {
         text_index: 0,

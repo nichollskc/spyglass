@@ -624,27 +624,30 @@ impl SuffixTrie {
     }
 
     pub fn find_edit_distance(&self, pattern: &str, max_errors: usize) -> Vec<Match> {
-        self.find_edit_distance_ignore(pattern, max_errors, HashMap::new())
+        self.find_edit_distance_ignore(pattern, max_errors, HashMap::new(), false)
     }
 
     pub fn find_edit_distance_ignore(&self,
                                      pattern: &str,
                                      max_errors: usize,
-                                     ignored_characters: HashMap<char, bool>)
+                                     ignored_characters: HashMap<char, bool>,
+                                     case_insensitive: bool)
         -> Vec<Match> {
             let config = MatcherConfig {
                 max_errors,
                 ignored_characters,
+                case_insensitive,
             };
             let mut matcher = SuffixTrieEditMatcher::new(config);
             matcher.find_edit_distance_ignore(&self, pattern)
         }
 
     /// Find all exact matches of the given pattern
-    pub fn find_exact(&self, pattern: &str) -> Vec<Match> {
+    pub fn find_exact(&self, pattern: &str, case_insensitive: bool) -> Vec<Match> {
         let empty_config = MatcherConfig {
             max_errors: 0,
             ignored_characters: HashMap::new(),
+            case_insensitive,
         };
         let mut matcher = SuffixTrieEditMatcher::new(empty_config);
         matcher.find_exact(&self, pattern)
@@ -857,6 +860,7 @@ impl Iterator for WorkingMatchesSet {
 pub struct MatcherConfig {
     ignored_characters: HashMap<char, bool>,
     max_errors: usize,
+    case_insensitive: bool,
 }
 
 #[derive(Debug)]
@@ -873,6 +877,18 @@ impl SuffixTrieEditMatcher {
             matches_next_gen: WorkingMatchesSet::empty(),
             config,
         }
+    }
+
+    fn chars_match(&self, char1: &char, char2: &char) -> bool {
+        let mut result = false;
+        if char1 == char2 {
+            result = true;
+        } else if self.config.case_insensitive {
+            if char1.to_ascii_lowercase() == char2.to_ascii_lowercase() {
+                result = true;
+            }
+        }
+        result
     }
 
     fn add_this_generation(&mut self, errors: usize, location: CharLocation, length: usize) {
@@ -914,7 +930,7 @@ impl SuffixTrieEditMatcher {
                           pattern_char: &char,
                           edge: &char) {
         let mut errors_after_match = existing_match.errors;
-        if edge == pattern_char {
+        if self.chars_match(edge, pattern_char) {
             // If the edge matches the character this doesn't add an error
         } else if self.config.ignored_characters.contains_key(edge) {
             // If the character is in the list of ignorable characters this doesn't add an error
