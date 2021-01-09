@@ -531,7 +531,8 @@ impl SuffixTrie {
 
     fn consume_all_shared_length(&self,
                                  parent_index: usize,
-                                 string_iterator: &mut Chars) -> EdgeMatch {
+                                 string_iterator: &mut Chars,
+                                 config: &MatcherConfig) -> EdgeMatch {
         let ancestor = self.get_node(parent_index);
         let ancestor_start = ancestor.edge_start_index;
         let ancestor_length = ancestor.edge_length;
@@ -555,7 +556,7 @@ impl SuffixTrie {
                 let ancestor_c = self.str_storage[index];
                 debug!("Next character of suffix is {}, next ancestor character is {}", c, ancestor_c);
 
-                if c != ancestor_c {
+                if ! config.chars_match(&c, &ancestor_c) {
                     edge_match = EdgeMatch {
                         overlap_type: EdgeMatchKind::Diverge(c),
                         shared_length: index_in_edge,
@@ -580,7 +581,8 @@ impl SuffixTrie {
                           string_iterator: &mut Chars,
                           start_index: usize) -> (usize, usize) {
         let edge_match = self.consume_all_shared_length(parent_index,
-                                                        string_iterator);
+                                                        string_iterator,
+                                                        &MatcherConfig::exact());
 
         debug!("Shared length with ancestor edge was {}", edge_match.shared_length);
 
@@ -645,9 +647,8 @@ impl SuffixTrie {
     /// Find all exact matches of the given pattern
     pub fn find_exact(&self, pattern: &str, case_insensitive: bool) -> Vec<Match> {
         let empty_config = MatcherConfig {
-            max_errors: 0,
-            ignored_characters: HashMap::new(),
             case_insensitive,
+            ..MatcherConfig::exact()
         };
         let mut matcher = SuffixTrieEditMatcher::new(empty_config);
         matcher.find_exact(&self, pattern)
@@ -863,6 +864,34 @@ pub struct MatcherConfig {
     case_insensitive: bool,
 }
 
+impl MatcherConfig {
+    fn exact() -> Self {
+        MatcherConfig {
+            ignored_characters: HashMap::new(),
+            max_errors: 0,
+            case_insensitive: false
+        }
+    }
+
+    fn chars_match(&self, char1: &char, char2: &char) -> bool {
+        let mut result = false;
+        if char1 == char2 {
+            result = true;
+        } else if self.case_insensitive {
+            if char1.to_ascii_lowercase() == char2.to_ascii_lowercase() {
+                result = true;
+            }
+        } else if self.ignored_characters.contains_key(char1) {
+            // If the character is in the list of ignorable characters this doesn't add an error
+            result = true;
+        } else if self.ignored_characters.contains_key(char2) {
+            // If the character is in the list of ignorable characters this doesn't add an error
+            result = true;
+        }
+        result
+    }
+}
+
 #[derive(Debug)]
 struct SuffixTrieEditMatcher {
     matches_this_gen: WorkingMatchesSet,
@@ -877,18 +906,6 @@ impl SuffixTrieEditMatcher {
             matches_next_gen: WorkingMatchesSet::empty(),
             config,
         }
-    }
-
-    fn chars_match(&self, char1: &char, char2: &char) -> bool {
-        let mut result = false;
-        if char1 == char2 {
-            result = true;
-        } else if self.config.case_insensitive {
-            if char1.to_ascii_lowercase() == char2.to_ascii_lowercase() {
-                result = true;
-            }
-        }
-        result
     }
 
     fn add_this_generation(&mut self, errors: usize, location: CharLocation, length: usize) {
@@ -930,12 +947,8 @@ impl SuffixTrieEditMatcher {
                           pattern_char: &char,
                           edge: &char) {
         let mut errors_after_match = existing_match.errors;
-        if self.chars_match(edge, pattern_char) {
+        if self.config.chars_match(edge, pattern_char) {
             // If the edge matches the character this doesn't add an error
-        } else if self.config.ignored_characters.contains_key(edge) {
-            // If the character is in the list of ignorable characters this doesn't add an error
-        } else if self.config.ignored_characters.contains_key(pattern_char) {
-            // If the character is in the list of ignorable characters this doesn't add an error
         } else {
             // Else this is a mismatch - increment the error counter
             errors_after_match += 1;
@@ -1041,7 +1054,8 @@ impl SuffixTrieEditMatcher {
         while let Some(c) = &string_iterator.next() {
             if let Some(child_index) = parent.get_child_index(*c) {
                 let edge_match = suffix_trie.consume_all_shared_length(*child_index,
-                                                                       &mut string_iterator);
+                                                                       &mut string_iterator,
+                                                                       &self.config);
                 match edge_match.overlap_type {
                     EdgeMatchKind::WholeMatch =>  {
                         // Continue iterating

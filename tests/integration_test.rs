@@ -89,6 +89,19 @@ fn find_matches_0_edit() {
 }
 
 #[test]
+fn find_case_insensitive() {
+    let trie = SuffixTrie::new("bananaBal");
+    println!("Result is {:#?}", trie);
+
+    let ignored = HashMap::new();
+    let matches = trie.find_edit_distance_ignore("ab", 0, ignored.clone(), false);
+    compare_match_indices(matches, vec![]);
+
+    let matches = trie.find_edit_distance_ignore("ab", 0, ignored.clone(), true);
+    compare_match_indices(matches, vec![5]);
+}
+
+#[test]
 fn find_matches_mismatch() {
     utilities::init_testing();
     let trie = SuffixTrie::new("abcXef abXdef");
