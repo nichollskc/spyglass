@@ -632,59 +632,22 @@ impl SuffixTrie {
                                      max_errors: usize,
                                      ignored_characters: HashMap<char, bool>)
         -> Vec<Match> {
-            let mut matcher = SuffixTrieEditMatcher::new(max_errors,
-                                                         ignored_characters);
+            let config = MatcherConfig {
+                max_errors,
+                ignored_characters,
+            };
+            let mut matcher = SuffixTrieEditMatcher::new(config);
             matcher.find_edit_distance_ignore(&self, pattern)
         }
 
     /// Find all exact matches of the given pattern
     pub fn find_exact(&self, pattern: &str) -> Vec<Match> {
-        let mut parent: &SubTrie = self.get_node(0);
-        let ascii_pattern = deunicode::deunicode(pattern);
-        let mut string_iterator = ascii_pattern.chars();
-
-        let mut found_mismatch = false;
-        while let Some(c) = &string_iterator.next() {
-            if let Some(child_index) = parent.get_child_index(*c) {
-                let edge_match = self.consume_all_shared_length(*child_index,
-                                                                &mut string_iterator);
-                match edge_match.overlap_type {
-                    EdgeMatchKind::WholeMatch =>  {
-                        // Continue iterating
-                        parent = self.get_node(*child_index);
-                    },
-                    EdgeMatchKind::Diverge(_) => {
-                        found_mismatch = true;
-                        break;
-                    },
-                    EdgeMatchKind::EarlyStop => {
-                        // Match ended in the middle of the edge (i.e. the rest of our
-                        // string is shorter than the edge, but all characters
-                        // match).
-                        // Set up parent node, but since've we're out of characters
-                        // we shouldn't end up iterating more
-                        parent = self.get_node(*child_index);
-                        assert!(!&string_iterator.next().is_some())
-                    }
-                }
-            } else {
-                // No match
-                found_mismatch = true;
-                break;
-            }
-        }
-
-        let mut matches = Vec::new();
-        if !found_mismatch {
-            let leaves = self.get_all_leaf_descendants(parent.node_index);
-            info!("Found {} leaves below parent {}",
-                  leaves.len(),
-                  parent.node_index);
-            matches = self.match_array_from_leaves(leaves, ascii_pattern.len(), 0);
-            matches.sort();
-        }
-        info!("Found {} matches", matches.len());
-        matches
+        let empty_config = MatcherConfig {
+            max_errors: 0,
+            ignored_characters: HashMap::new(),
+        };
+        let mut matcher = SuffixTrieEditMatcher::new(empty_config);
+        matcher.find_exact(&self, pattern)
     }
 
     fn len(&self) -> usize {
@@ -891,34 +854,37 @@ impl Iterator for WorkingMatchesSet {
 }
 
 #[derive(Debug)]
-struct SuffixTrieEditMatcher {
-    matches_this_gen: WorkingMatchesSet,
-    matches_next_gen: WorkingMatchesSet,
+pub struct MatcherConfig {
     ignored_characters: HashMap<char, bool>,
     max_errors: usize,
 }
 
+#[derive(Debug)]
+struct SuffixTrieEditMatcher {
+    matches_this_gen: WorkingMatchesSet,
+    matches_next_gen: WorkingMatchesSet,
+    config: MatcherConfig,
+}
+
 impl SuffixTrieEditMatcher {
-    fn new(max_errors: usize,
-           ignored_characters: HashMap<char, bool>) -> Self {
+    fn new(config: MatcherConfig) -> Self {
         SuffixTrieEditMatcher {
             matches_this_gen: WorkingMatchesSet::only_root_node(),
             matches_next_gen: WorkingMatchesSet::empty(),
-            ignored_characters,
-            max_errors,
+            config,
         }
     }
 
     fn add_this_generation(&mut self, errors: usize, location: CharLocation, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
-        if errors <= self.max_errors {
+        if errors <= self.config.max_errors {
             self.matches_this_gen.add_working_match(location, errors, length);
         }
     }
 
     fn add_next_generation(&mut self, errors: usize, location: CharLocation, length: usize) {
         // Only add the match to the list if we haven't exceded the error limit
-        if errors <= self.max_errors {
+        if errors <= self.config.max_errors {
             self.matches_next_gen.add_working_match(location, errors, length);
         }
     }
@@ -950,9 +916,9 @@ impl SuffixTrieEditMatcher {
         let mut errors_after_match = existing_match.errors;
         if edge == pattern_char {
             // If the edge matches the character this doesn't add an error
-        } else if self.ignored_characters.contains_key(edge) {
+        } else if self.config.ignored_characters.contains_key(edge) {
             // If the character is in the list of ignorable characters this doesn't add an error
-        } else if self.ignored_characters.contains_key(pattern_char) {
+        } else if self.config.ignored_characters.contains_key(pattern_char) {
             // If the character is in the list of ignorable characters this doesn't add an error
         } else {
             // Else this is a mismatch - increment the error counter
@@ -1049,4 +1015,53 @@ impl SuffixTrieEditMatcher {
             matches.sort();
             matches
         }
+
+    fn find_exact(&mut self, suffix_trie: &SuffixTrie, pattern: &str) -> Vec<Match> {
+        let mut parent: &SubTrie = suffix_trie.get_node(0);
+        let ascii_pattern = deunicode::deunicode(pattern);
+        let mut string_iterator = ascii_pattern.chars();
+
+        let mut found_mismatch = false;
+        while let Some(c) = &string_iterator.next() {
+            if let Some(child_index) = parent.get_child_index(*c) {
+                let edge_match = suffix_trie.consume_all_shared_length(*child_index,
+                                                                       &mut string_iterator);
+                match edge_match.overlap_type {
+                    EdgeMatchKind::WholeMatch =>  {
+                        // Continue iterating
+                        parent = suffix_trie.get_node(*child_index);
+                    },
+                    EdgeMatchKind::Diverge(_) => {
+                        found_mismatch = true;
+                        break;
+                    },
+                    EdgeMatchKind::EarlyStop => {
+                        // Match ended in the middle of the edge (i.e. the rest of our
+                        // string is shorter than the edge, but all characters
+                        // match).
+                        // Set up parent node, but since've we're out of characters
+                        // we shouldn't end up iterating more
+                        parent = suffix_trie.get_node(*child_index);
+                        assert!(!&string_iterator.next().is_some())
+                    }
+                }
+            } else {
+                // No match
+                found_mismatch = true;
+                break;
+            }
+        }
+
+        let mut matches = Vec::new();
+        if !found_mismatch {
+            let leaves = suffix_trie.get_all_leaf_descendants(parent.node_index);
+            info!("Found {} leaves below parent {}",
+                  leaves.len(),
+                  parent.node_index);
+            matches = suffix_trie.match_array_from_leaves(leaves, ascii_pattern.len(), 0);
+            matches.sort();
+        }
+        info!("Found {} matches", matches.len());
+        matches
+    }
 }
