@@ -531,8 +531,7 @@ impl SuffixTrie {
 
     fn consume_all_shared_length(&self,
                                  parent_index: usize,
-                                 string_iterator: &mut Chars,
-                                 config: &MatcherConfig) -> EdgeMatch {
+                                 string_iterator: &mut Chars) -> EdgeMatch {
         let ancestor = self.get_node(parent_index);
         let ancestor_start = ancestor.edge_start_index;
         let ancestor_length = ancestor.edge_length;
@@ -556,7 +555,7 @@ impl SuffixTrie {
                 let ancestor_c = self.str_storage[index];
                 debug!("Next character of suffix is {}, next ancestor character is {}", c, ancestor_c);
 
-                if ! config.chars_match(&c, &ancestor_c) {
+                if c != ancestor_c {
                     edge_match = EdgeMatch {
                         overlap_type: EdgeMatchKind::Diverge(c),
                         shared_length: index_in_edge,
@@ -581,8 +580,7 @@ impl SuffixTrie {
                           string_iterator: &mut Chars,
                           start_index: usize) -> (usize, usize) {
         let edge_match = self.consume_all_shared_length(parent_index,
-                                                        string_iterator,
-                                                        &MatcherConfig::exact());
+                                                        string_iterator);
 
         debug!("Shared length with ancestor edge was {}", edge_match.shared_length);
 
@@ -651,7 +649,7 @@ impl SuffixTrie {
             ..MatcherConfig::exact()
         };
         let mut matcher = SuffixTrieEditMatcher::new(empty_config);
-        matcher.find_exact(&self, pattern)
+        matcher.find_edit_distance_ignore(&self, pattern)
     }
 
     fn len(&self) -> usize {
@@ -1054,8 +1052,7 @@ impl SuffixTrieEditMatcher {
         while let Some(c) = &string_iterator.next() {
             if let Some(child_index) = parent.get_child_index(*c) {
                 let edge_match = suffix_trie.consume_all_shared_length(*child_index,
-                                                                       &mut string_iterator,
-                                                                       &self.config);
+                                                                       &mut string_iterator);
                 match edge_match.overlap_type {
                     EdgeMatchKind::WholeMatch =>  {
                         // Continue iterating

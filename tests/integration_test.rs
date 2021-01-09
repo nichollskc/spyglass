@@ -90,15 +90,27 @@ fn find_matches_0_edit() {
 
 #[test]
 fn find_case_insensitive() {
-    let trie = SuffixTrie::new("bananaBal");
+    let trie = SuffixTrie::new("aBcABCabcaBcaBC");
     println!("Result is {:#?}", trie);
 
     let ignored = HashMap::new();
-    let matches = trie.find_edit_distance_ignore("ab", 0, ignored.clone(), false);
+    let matches = trie.find_edit_distance_ignore("ABc", 0, ignored.clone(), false);
     compare_match_indices(matches, vec![]);
 
-    let matches = trie.find_edit_distance_ignore("ab", 0, ignored.clone(), true);
-    compare_match_indices(matches, vec![5]);
+    let matches = trie.find_edit_distance_ignore("ABC", 0, ignored.clone(), true);
+    compare_match_indices(matches, vec![0, 3, 6, 9, 12]);
+
+    let matches = trie.find_edit_distance_ignore("Abc", 0, ignored.clone(), true);
+    compare_match_indices(matches, vec![0, 3, 6, 9, 12]);
+
+    let matches = trie.find_exact("ABc", false);
+    compare_match_indices(matches, vec![]);
+
+    let matches = trie.find_exact("ABC", true);
+    compare_match_indices(matches, vec![0, 3, 6, 9, 12]);
+
+    let matches = trie.find_exact("Abc", true);
+    compare_match_indices(matches, vec![0, 3, 6, 9, 12]);
 }
 
 #[test]
