@@ -6,7 +6,7 @@ fn benchmark_find(c: &mut Criterion) {
     let trie = SuffixTrie::from_file(black_box("./resources/tests/large_100/para.txt")).unwrap();
     c.bench_function("find_exact_para", |b| b.iter(|| black_box(&trie).find_exact("that")));
     c.bench_function("find_edit_0_para", |b| b.iter(|| black_box(&trie).find_edit_distance("that", 0)));
-    c.bench_function("find_edit_0_para", |b| b.iter(|| black_box(&trie).find_edit_distance("loss ofEdEN", 2)));
+    c.bench_function("find_edit_2_para", |b| b.iter(|| black_box(&trie).find_edit_distance("loss ofEdEN", 2)));
 }
 
 fn benchmark_dir_100(c: &mut Criterion) {
